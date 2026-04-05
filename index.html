@@ -1,0 +1,1372 @@
+<!--
+==============================================
+  智能办公助理 — FIBA 女篮世界杯预选赛
+==============================================
+  版本：v2.4
+  更新日期：2026-04-03
+
+  版本历史：
+  v1.0 · 2026-04-03  初始版本，行程表（日/周/月视图）、时间轴排序
+  v1.1 · 2026-04-03  接入 Excel 真实数据（南苏丹队出发/抵达航班、酒店房间）
+  v1.2 · 2026-04-03  修复语音输入和 Excel 识别功能
+  v1.3 · 2026-04-03  新增联系人管理（司机车牌号、酒店分机号、官员房间号等）
+  v1.4 · 2026-04-03  修复顶部日期：行程表显示查看日期，其他页显示系统今日
+  v1.5 · 2026-04-03  顶部日期统一显示行程表当前查看日期，全页一致
+  v1.6 · 2026-04-03  行程表支持日期自由切换（‹ › 按钮 + 日期选择器）
+  v1.7 · 2026-04-03  恢复录入界面三种方式：文字输入、语音输入、文档上传
+  v1.9 · 2026-04-03  修复 submitNew 函数缺失导致 Illegal return statement
+  v1.8 · 2026-04-03  修复录入 tab 样式及重复 fileInput 导致文件上传失效问题
+==============================================
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Permissions-Policy" content="microphone=*">
+<title>智能办公助理 — FIBA 女篮世界杯预选赛</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--cp:#185FA5;--cpb:#E6F1FB;--cs:#0F6E56;--csb:#E1F5EE;--ca:#BA7517;--cab:#FAEEDA;--cr:#A32D2D;--crb:#FCEBEB;--cc:#993C1D;--ccb:#FAECE7;--purple:#5B21B6;--purpleb:#EDE9FE;--bg:#F8F9FA;--card:#fff;--text:#1a1a1a;--text2:#555;--text3:#888;--bd:#e0e0e0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.app{max-width:480px;margin:0 auto;background:var(--card);min-height:100vh;display:flex;flex-direction:column;box-shadow:0 0 20px rgba(0,0,0,.08);}
+.topbar{padding:14px 16px 10px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;}
+.topbar-title{font-size:17px;font-weight:700;}
+.topbar-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.remind-btn{background:var(--cab);color:var(--ca);border:1px solid var(--ca);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer;}
+.nav{display:flex;border-bottom:1px solid var(--bd);overflow-x:auto;}
+.nav::-webkit-scrollbar{display:none;}
+.nav-tab{flex-shrink:0;padding:10px 11px;font-size:12px;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;white-space:nowrap;}
+.nav-tab.active{color:var(--cp);border-bottom-color:var(--cp);font-weight:700;}
+.view-toggle{display:flex;gap:4px;padding:10px 16px;border-bottom:1px solid var(--bd);}
+.view-btn{padding:4px 14px;font-size:12px;border-radius:7px;border:1px solid var(--bd);cursor:pointer;background:transparent;color:var(--text3);}
+.view-btn.active{background:var(--cpb);color:var(--cp);border-color:var(--cp);font-weight:700;}
+.content{padding:14px 16px;flex:1;}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.stat{background:var(--bg);border-radius:10px;padding:10px;text-align:center;}
+.stat-num{font-size:22px;font-weight:700;}
+.stat-lbl{font-size:11px;color:var(--text3);margin-top:2px;}
+.sec{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px;}
+.sec:first-child{margin-top:0;}
+.info-banner{background:var(--cpb);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--cp);line-height:1.7;}
+/* timeline */
+.timeline{display:flex;flex-direction:column;}
+.tl-item{display:flex;}
+.tl-left{width:54px;flex-shrink:0;padding-top:13px;text-align:right;padding-right:8px;}
+.tl-time{font-size:12px;font-weight:700;color:var(--text2);line-height:1.3;}
+.tl-mid{display:flex;flex-direction:column;align-items:center;padding-top:14px;width:20px;flex-shrink:0;}
+.dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.dot.core{background:var(--cp);box-shadow:0 0 0 3px var(--cpb);}
+.dot.temp{background:var(--cs);box-shadow:0 0 0 3px var(--csb);}
+.dot.done{background:#bbb;box-shadow:0 0 0 3px #eee;}
+.dot.nxt{background:var(--ca);box-shadow:0 0 0 3px var(--cab);}
+.dot.arr{background:var(--purple);box-shadow:0 0 0 3px var(--purpleb);}
+.line{width:2px;background:var(--bd);flex:1;min-height:10px;margin-top:2px;}
+.tl-right{flex:1;padding:6px 0 6px 10px;}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px 12px;cursor:pointer;display:flex;gap:8px;align-items:flex-start;transition:border-color .15s;}
+.card:hover{border-color:#aaa;}
+.card.done{opacity:.55;}
+.card.nxt{border-color:var(--ca);background:var(--cab);}
+.card.arr-card{border-color:var(--purple);background:var(--purpleb);}
+.card-main{flex:1;min-width:0;}
+.card-title{font-size:13px;font-weight:700;margin-bottom:3px;}
+.card-title.done{text-decoration:line-through;color:var(--text3);}
+.card-meta{font-size:11px;color:var(--text2);line-height:1.8;}
+.contact-chips{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;}
+.cchip{display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--bd);border-radius:20px;padding:2px 8px;font-size:11px;color:var(--text2);cursor:pointer;}
+.cchip:hover{border-color:var(--cp);color:var(--cp);}
+.cchip-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.card-badges{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;}
+.badge{font-size:10px;padding:2px 7px;border-radius:8px;font-weight:700;white-space:nowrap;}
+.badge.core{background:var(--cpb);color:var(--cp);}
+.badge.temp{background:var(--csb);color:var(--cs);}
+.badge.done{background:#eee;color:#888;}
+.badge.pend{background:var(--cab);color:var(--ca);}
+.badge.foll{background:var(--ccb);color:var(--cc);}
+.badge.nxt{background:var(--cab);color:var(--ca);border:1px solid var(--ca);}
+.badge.arr{background:var(--purpleb);color:var(--purple);}
+.card-actions{display:flex;flex-direction:column;gap:4px;flex-shrink:0;}
+.act-btn{font-size:11px;padding:3px 9px;border-radius:7px;border:1px solid var(--bd);cursor:pointer;background:transparent;color:var(--text3);white-space:nowrap;}
+.act-btn.ok{color:var(--cs);border-color:var(--cs);}
+.act-btn.fo{color:var(--ca);border-color:var(--ca);}
+.follow-cnt{font-size:10px;color:var(--cc);margin-top:2px;}
+/* contacts */
+.role-filter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.role-pill{padding:4px 12px;border-radius:20px;border:1px solid var(--bd);font-size:12px;cursor:pointer;background:transparent;color:var(--text3);}
+.role-pill.active{font-weight:700;}
+.contact-card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;}
+.contact-card:hover{border-color:#aaa;}
+.cc-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.cc-name{font-size:14px;font-weight:700;}
+.cc-role{font-size:12px;margin-top:1px;}
+.cf-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.cf{background:var(--bg);border-radius:8px;padding:6px 8px;}
+.cf.sp{background:var(--cpb);}
+.cf-lbl{font-size:10px;color:var(--text3);margin-bottom:2px;}
+.cf.sp .cf-lbl{color:var(--cp);}
+.cf-val{font-size:12px;color:var(--text);font-weight:500;word-break:break-all;}
+.cf.sp .cf-val{color:var(--cp);font-weight:700;}
+.cf-val.hi{color:var(--cp);font-weight:700;}
+.cf-full{grid-column:1/-1;}
+.add-contact-btn{width:100%;padding:10px;border:1px dashed var(--cp);border-radius:10px;background:transparent;color:var(--cp);font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:12px;}
+/* modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;}
+.modal{background:var(--card);border-radius:16px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
+.modal-hdr{padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:15px;font-weight:700;}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3);line-height:1;}
+.modal-body{padding:14px 16px;display:flex;flex-direction:column;gap:10px;}
+.modal-ftr{padding:12px 16px;border-top:1px solid var(--bd);display:flex;gap:8px;justify-content:flex-end;}
+.detail-box{background:var(--bg);border-radius:10px;padding:12px;font-size:13px;line-height:2.1;}
+.detail-box strong{font-weight:700;}
+.detail-box span{color:var(--text2);}
+.btn-p{padding:9px 20px;background:var(--cp);color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:700;}
+.btn-p.full{width:100%;}
+.btn-s{padding:8px 16px;background:transparent;color:var(--text3);border:1px solid var(--bd);border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;}
+.call-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:8px;border:1px solid var(--cs);color:var(--cs);font-size:12px;background:transparent;cursor:pointer;font-family:inherit;}
+.wechat-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:8px;border:1px solid var(--cp);color:var(--cp);font-size:12px;background:transparent;cursor:pointer;font-family:inherit;}
+/* form */
+.form-group{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+.form-label{font-size:12px;font-weight:700;color:var(--text2);}
+.form-input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--bd);font-size:13px;background:transparent;color:var(--text);font-family:inherit;}
+.form-input:focus{outline:none;border-color:var(--cp);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.type-toggle{display:flex;gap:6px;}
+.type-btn{flex:1;padding:7px;font-size:12px;border-radius:8px;border:1px solid var(--bd);cursor:pointer;background:transparent;color:var(--text3);font-family:inherit;}
+.type-btn.ca{background:var(--cpb);color:var(--cp);border-color:var(--cp);font-weight:700;}
+.type-btn.cb{background:var(--csb);color:var(--cs);border-color:var(--cs);font-weight:700;}
+.role-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.role-opt{padding:8px 4px;border-radius:8px;border:1px solid var(--bd);text-align:center;font-size:12px;cursor:pointer;background:transparent;color:var(--text3);font-family:inherit;}
+.role-opt.sel{border-color:var(--cp);background:var(--cpb);color:var(--cp);font-weight:700;}
+.sp-fields{background:var(--cpb);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;}
+.sp-fields .form-label{color:var(--cp);}
+.cp-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:13px;}
+.cp-row:last-child{border-bottom:none;}
+.cp-check{width:18px;height:18px;accent-color:var(--cp);cursor:pointer;}
+/* pax list */
+.pax-list{background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:8px;}
+.pax-flight{font-size:13px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.pax-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--bd);font-size:12px;}
+.pax-row:last-child{border-bottom:none;}
+/* hotel */
+.hotel-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.hotel-card{background:var(--bg);border-radius:10px;padding:10px 12px;}
+.hotel-room{font-size:12px;font-weight:700;color:var(--cp);margin-bottom:3px;}
+.hotel-name{font-size:12px;}
+.hotel-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+/* messages */
+.msg-card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:12px;}
+.msg-lang-row{display:flex;gap:6px;margin-bottom:8px;align-items:center;}
+.lang-btn{padding:3px 11px;font-size:11px;border-radius:10px;border:1px solid var(--bd);cursor:pointer;background:transparent;color:var(--text3);}
+.lang-btn.active{background:var(--cpb);color:var(--cp);border-color:var(--cp);}
+.msg-box{background:var(--bg);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.8;white-space:pre-line;}
+.copy-btn{width:100%;margin-top:8px;padding:7px;font-size:12px;border-radius:8px;border:1px solid var(--bd);cursor:pointer;background:transparent;color:var(--text3);}
+.date-hdr{font-size:13px;font-weight:700;color:var(--cp);background:var(--cpb);border-radius:8px;padding:6px 10px;margin:10px 0 6px;}
+/* reminder popup */
+.rpop{position:fixed;top:64px;right:12px;width:272px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;z-index:60;box-shadow:0 4px 20px rgba(0,0,0,.12);}
+.rpop-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.rpop-dot{width:8px;height:8px;border-radius:50%;background:var(--ca);flex-shrink:0;}
+.rpop-title{font-size:13px;font-weight:700;flex:1;}
+.rpop-close{background:none;border:none;font-size:14px;cursor:pointer;color:var(--text3);}
+.rpop-body{font-size:12px;color:var(--text2);line-height:1.7;white-space:pre-line;}
+.rpop-btns{display:flex;gap:6px;margin-top:10px;}
+.rpop-btn{flex:1;padding:6px;font-size:11px;border-radius:7px;border:1px solid var(--bd);cursor:pointer;background:transparent;font-family:inherit;}
+.rpop-btn.ok{color:var(--cs);border-color:var(--cs);}
+/* week/month */
+.week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px;}
+.wday{text-align:center;}
+.wday-lbl{font-size:11px;color:var(--text3);margin-bottom:4px;}
+.wday-num{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.wday-num.today{background:var(--cp);color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;margin:0 auto 4px;}
+.wdot{width:6px;height:6px;border-radius:50%;margin:2px auto;}
+.wdot.core{background:var(--cp);}.wdot.temp{background:var(--cs);}.wdot.arr{background:var(--purple);}
+.month-hdr{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:4px;}
+.mhd{text-align:center;font-size:11px;color:var(--text3);padding:4px 0;}
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.mcell{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;padding:2px;border-radius:6px;cursor:pointer;}
+.mcell:hover{background:#f0f0f0;}
+.mcell-num{font-size:12px;color:var(--text);margin-bottom:2px;}
+.mcell-num.today{background:var(--cp);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;}
+.mcell-num.other{color:#ccc;}
+.mdot{width:5px;height:5px;border-radius:50%;margin:1px auto;}
+.mdot.core{background:var(--cp);}.mdot.temp{background:var(--cs);}.mdot.arr{background:var(--purple);}
+.empty{text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;}
+.imt{flex:1;text-align:center;padding:8px;font-size:12px;border-radius:8px;border:1px solid var(--bd);cursor:pointer;background:transparent;color:var(--text3);font-family:inherit;transition:all .15s;}
+.imt.active{background:var(--cpb);color:var(--cp);border-color:var(--cp);font-weight:700;}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+.ver-badge{position:relative;display:inline-block;}
+.ver-tag{font-size:10px;font-weight:700;background:var(--cpb);color:var(--cp);border-radius:6px;padding:2px 7px;cursor:pointer;user-select:none;border:1px solid var(--cp);}
+.ver-popup{display:none;position:absolute;top:calc(100% + 6px);right:0;width:260px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;z-index:100;box-shadow:0 4px 20px rgba(0,0,0,.12);}
+.ver-popup.open{display:block;}
+.ver-popup-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--bd);}
+.ver-row{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--bd);font-size:11px;}
+.ver-row:last-child{border-bottom:none;}
+.ver-num{font-weight:700;color:var(--cp);flex-shrink:0;width:32px;}
+.ver-date{color:var(--text3);flex-shrink:0;width:56px;}
+.ver-desc{color:var(--text2);line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div><div class="topbar-title">智能办公助理</div><div class="topbar-sub" id="topDate"></div></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="ver-badge">
+        <span class="ver-tag" onclick="toggleVer()">v2.4</span>
+        <div class="ver-popup" id="verPopup">
+          <div class="ver-popup-title">📋 版本记录</div>
+          <div class="ver-row"><span class="ver-num">v1.9</span><span class="ver-date">04-03</span><span class="ver-desc">修复 submitNew 函数缺失导致的 Illegal return statement 语法错误</span></div>
+          <div class="ver-row"><span class="ver-num">v1.8</span><span class="ver-date">04-03</span><span class="ver-desc">修复录入 tab 样式及重复 fileInput 导致文件上传失效</span></div>
+          <div class="ver-row"><span class="ver-num">v1.7</span><span class="ver-date">04-03</span><span class="ver-desc">恢复录入三种方式：文字输入、语音输入、文档上传</span></div>
+          <div class="ver-row"><span class="ver-num">v1.6</span><span class="ver-date">04-03</span><span class="ver-desc">行程表支持日期自由切换（‹ › 按钮 + 日期选择器）</span></div>
+          <div class="ver-row"><span class="ver-num">v1.5</span><span class="ver-date">04-03</span><span class="ver-desc">顶部日期统一显示行程查看日期，全页一致</span></div>
+          <div class="ver-row"><span class="ver-num">v1.4</span><span class="ver-date">04-03</span><span class="ver-desc">修复顶部日期显示逻辑</span></div>
+          <div class="ver-row"><span class="ver-num">v1.3</span><span class="ver-date">04-03</span><span class="ver-desc">联系人管理（车牌号、分机号等），行程卡片关联联系人</span></div>
+          <div class="ver-row"><span class="ver-num">v1.2</span><span class="ver-date">04-03</span><span class="ver-desc">修复语音输入和 Excel 识别功能</span></div>
+          <div class="ver-row"><span class="ver-num">v1.1</span><span class="ver-date">04-03</span><span class="ver-desc">接入 Excel 真实航班数据，酒店房间信息</span></div>
+          <div class="ver-row"><span class="ver-num">v1.0</span><span class="ver-date">04-03</span><span class="ver-desc">初始版本，行程表日/周/月视图，时间轴排序</span></div>
+        </div>
+      </div>
+      <button class="remind-btn" onclick="showRemind()">⏰ 提醒</button>
+    </div>
+  </div>
+  <div class="nav">
+    <div class="nav-tab active" onclick="switchNav('schedule')">行程表</div>
+    <div class="nav-tab" onclick="switchNav('flights')">航班</div>
+    <div class="nav-tab" onclick="switchNav('contacts')">联系人</div>
+    <div class="nav-tab" onclick="switchNav('hotel')">酒店</div>
+    <div class="nav-tab" onclick="switchNav('messages')">消息</div>
+    <div class="nav-tab" onclick="switchNav('add')">录入</div>
+  </div>
+  <div id="mainContent"></div>
+</div>
+<input type="file" id="fileInput" style="display:none"
+  accept=".xlsx,.xls,.csv,.txt,.pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp"
+  onchange="handleFile(event)">
+<div id="modalContainer"></div>
+<div id="remindPopup" style="display:none" class="rpop">
+  <div class="rpop-hdr"><div class="rpop-dot"></div><div class="rpop-title" id="rpTitle"></div><button class="rpop-close" onclick="document.getElementById('remindPopup').style.display='none'">✕</button></div>
+  <div class="rpop-body" id="rpBody"></div>
+  <div class="rpop-btns"><button class="rpop-btn ok" onclick="markDone()">已完成</button><button class="rpop-btn" onclick="snooze()">30分钟后提醒</button></div>
+</div>
+<script>
+const DAYS=['日','一','二','三','四','五','六'];
+const now=new Date(), todayStr=now.toISOString().slice(0,10);
+let currentDate='2026-04-18'; // 当前查看的日期，可切换
+
+const ROLE_META={
+  driver:  {label:'司机',     color:'#185FA5',bg:'#E6F1FB',icon:'🚗'},
+  hotel:   {label:'酒店对接', color:'#0F6E56',bg:'#E1F5EE',icon:'🏨'},
+  coach:   {label:'教练',     color:'#5B21B6',bg:'#EDE9FE',icon:'🏀'},
+  medical: {label:'队医',     color:'#A32D2D',bg:'#FCEBEB',icon:'🏥'},
+  airline: {label:'航司地勤', color:'#993C1D',bg:'#FAECE7',icon:'✈️'},
+  official:{label:'官员',     color:'#BA7517',bg:'#FAEEDA',icon:'🏛'},
+  other:   {label:'其他',     color:'#555',   bg:'#F1F1F1',icon:'👤'},
+};
+
+let contacts=[
+  {id:1,role:'driver',name:'王师傅',phone:'13800001111',wechat:'wang_driver01',email:'',note:'负责球队大巴，主力司机',special:{plate:'鄂A·88888',vehicleType:'丰田埃尔法',capacity:'7人',area:'武汉市区+天河机场'}},
+  {id:2,role:'driver',name:'李师傅',phone:'13900002222',wechat:'li_driver02',email:'',note:'负责行李车及备用',special:{plate:'鄂A·56789',vehicleType:'别克GL8',capacity:'6人+行李',area:'武汉全程'}},
+  {id:3,role:'driver',name:'张师傅',phone:'13700003333',wechat:'',email:'',note:'大团体备用司机',special:{plate:'鄂B·12345',vehicleType:'本田奥德赛',capacity:'7人',area:'酒店至机场'}},
+  {id:4,role:'hotel',name:'陈经理',phone:'02788889999',wechat:'chen_hotel_mgr',email:'chen@grandhotel.com',note:'格兰德酒店对接，有全楼层房卡权限',special:{position:'驻店经理',extension:'8001',roomAuth:'11F/12F/15F全楼层',checkInAuth:'可办理团体入住'}},
+  {id:5,role:'hotel',name:'刘前台',phone:'02788880001',wechat:'',email:'',note:'夜班前台负责人',special:{position:'夜班前台主管',extension:'0',roomAuth:'标准房间',checkInAuth:'普通入住'}},
+  {id:6,role:'coach',name:'Marcus Wong',phone:'+61400111222',wechat:'',email:'marcus@ssbfed.org',note:'球队主教练',special:{qualification:'FIBA Level 3',nationality:'澳大利亚',passport:'A1234567'}},
+  {id:7,role:'official',name:'Luol Deng',phone:'+1202333444',wechat:'',email:'luol@ssbfed.org',note:'球队主席/团长，重大事项需第一时间通知',special:{title:'南苏丹篮球联合会主席',vipRoom:'1022套房',passport:'SS1234',priority:'最高'}},
+  {id:8,role:'official',name:'EVALUBA TABAN',phone:'+211921555556',wechat:'',email:'eva@ssbfed.co',note:'传播主管，媒体对接',special:{title:'传播主管',vipRoom:'1110',passport:'',priority:'普通'}},
+  {id:9,role:'medical',name:'胡琪',phone:'13600005555',wechat:'huqi_med',email:'',note:'随队队医，治疗室1122',special:{qualification:'执业医师',treatmentRoom:'1122',specialty:'运动医学',equipment:'冰浴设备×2'}},
+  {id:10,role:'airline',name:'南航地勤-武汉',phone:'40006695539',wechat:'',email:'',note:'南航武汉天河机场地勤，CZ航班',special:{airline:'中国南方航空',counter:'T2航站楼 F-G区',groupContact:'团体值机需提前联系'}},
+  {id:11,role:'airline',name:'韩航地勤-武汉',phone:'40082888818',wechat:'',email:'',note:'大韩航空武汉地勤，KE航班',special:{airline:'大韩航空',counter:'T2航站楼 H区',groupContact:'团体需提前48小时预约'}},
+];
+let nextContactId=12;
+
+const departures=[
+  {flight:'CZ8725',time:'12:00',date:'2026-04-18',origin:'Wuhan',pax:['Marcus Wong'],total:4,cids:[10,1]},
+  {flight:'KE166', time:'12:50',date:'2026-04-18',origin:'Wuhan',pax:['Nyayongah Gony','Susan Ayaa','Sarah Ameer Deng'],total:4,cids:[11,1]},
+  {flight:'AF5295',time:'14:30',date:'2026-04-18',origin:'Wuhan',pax:['Anegor Wol'],total:1,cids:[1]},
+  {flight:'CZ8671',time:'16:00',date:'2026-04-18',origin:'Wuhan',pax:['Stephen J Vear'],total:1,cids:[10,2]},
+  {flight:'CZ8721',time:'17:30',date:'2026-04-18',origin:'Wuhan',pax:['Perina Leime','Luol Deng'],total:2,cids:[10,7,1]},
+  {flight:'CZ3441',time:'18:25',date:'2026-04-18',origin:'Wuhan',pax:['ALBERTO ANTUNA','JULIA AKOT','ALBERTO CARRILLO','EVALUBA TABAN','KORABA KAMBAYA','PEDRO RIVERODELCAZ','Akon Macuei','Wal Paul Puk'],total:8,cids:[10,2,3]},
+  {flight:'CZ8558',time:'20:30',date:'2026-04-18',origin:'Wuhan',pax:['Nyamer Diew'],total:1,cids:[10,1]},
+  {flight:'CZ8519',time:'22:05',date:'2026-04-18',origin:'Wuhan',pax:['Yar Garang Mayen','Adut Bulgak','Piath Gabriel'],total:3,cids:[10,2]},
+  {flight:'CZ8725',time:'12:00',date:'2026-04-19',origin:'Wuhan',pax:['Nyamouch Pidor Teny'],total:1,cids:[10,1]},
+  {flight:'CZ8671',time:'16:00',date:'2026-04-19',origin:'Wuhan',pax:['Maria Gakdeng','DENG AJOU DENG'],total:2,cids:[10,1]},
+];
+const arrivals=[
+  // 4月13日接机（Excel sheet2, 4/13/2026）
+  {flight:'KE165',  time:'11:30',date:'2026-04-13',origin:'首尔',pax:['Gony/Nyayongah Wiyual'],total:1,cids:[11,1]},
+  {flight:'MU2566', time:'07:15',date:'2026-04-13',origin:'武汉',pax:['Macuei, Akon Rose Paul'],total:1,cids:[10,1]},
+  // 5月4日
+  {flight:'CZ-659', time:'20:55',date:'2026-05-04',origin:'广州',pax:['JULIA AKOT','DENG AJOU DENG'],total:2,cids:[10,1]},
+  // 7月4日
+  {flight:'CZ-6608',time:'11:25',date:'2026-07-04',origin:'广州',pax:['Nyamouch Pidor Teny','EVALUBA TABAN','KORABA KAMBAYA'],total:3,cids:[10,1]},
+  // 8月4日
+  {flight:'KE165',  time:'11:30',date:'2026-08-04',origin:'首尔',pax:['Susan Ayaa'],total:2,cids:[11,1]},
+  {flight:'CZ-8520',time:'11:25',date:'2026-08-04',origin:'广州',pax:['Yar Garang Mayen'],total:2,cids:[10,1]},
+  {flight:'LH7095', time:'17:00',date:'2026-08-04',origin:'北京',pax:['Nyamer Lual Diew'],total:1,cids:[1]},
+  {flight:'CZ-3580',time:'20:10',date:'2026-08-04',origin:'上海',pax:['Maria Gakdeng'],total:1,cids:[10,1]},
+  {flight:'CZ-6589',time:'21:00',date:'2026-08-04',origin:'马德里',pax:['ALBERTO ANTUNA','ALBERTO CARRILLO','PEDRO RIVERODELCAZ','Marcus Wong'],total:4,cids:[10,2]},
+  // 9月4日
+  {flight:'KE165',  time:'11:30',date:'2026-09-04',origin:'首尔',pax:['Sarah Ameer Deng'],total:1,cids:[11,1]},
+  {flight:'CZ-3346',time:'19:00',date:'2026-09-04',origin:'广州',pax:['Adut Bulgak'],total:1,cids:[10,1]},
+  {flight:'AF5219', time:'23:25',date:'2026-09-04',origin:'上海',pax:['Anegor Wol'],total:1,cids:[1]},
+  // 10月4日
+  {flight:'CZ6608', time:'11:25',date:'2026-10-04',origin:'广州',pax:['Steven J Vear'],total:1,cids:[10,1]},
+  {flight:'CZ-3824',time:'13:20',date:'2026-10-04',origin:'上海',pax:['Wal Paul Puk'],total:1,cids:[10,1]},
+  {flight:'CZ-3544',time:'23:55',date:'2026-10-04',origin:'上海',pax:['Luol Deng'],total:1,cids:[10,7,1]},
+  // 11月4日
+  {flight:'KE165',  time:'11:30',date:'2026-11-04',origin:'首尔',pax:['Leime Perina'],total:1,cids:[11,1]},
+  {flight:'CZ-6589',time:'21:00',date:'2026-11-04',origin:'马德里',pax:['Piath Gabriel'],total:1,cids:[10,2]},
+];
+
+let events=[],nextId=1;
+departures.forEach(d=>{events.push({id:nextId++,type:'core',cat:'departure',title:'送机 '+d.flight,time:d.time,endTime:'',date:d.date,location:'武汉天河国际机场',note:'共'+d.total+'人，航班'+d.flight,status:'pending',followCount:0,remindBefore:120,pax:d.pax,flight:d.flight,origin:d.origin,cids:d.cids});});
+arrivals.forEach(a=>{events.push({id:nextId++,type:'core',cat:'arrival',title:'接机 '+a.flight,time:a.time,endTime:'',date:a.date,location:'武汉天河国际机场',note:a.origin+'抵达，共'+a.total+'人',status:'pending',followCount:0,remindBefore:120,pax:a.pax,flight:a.flight,origin:a.origin,cids:a.cids});});
+[{title:'通知酒店准备行李寄存',time:'09:00',note:'提醒前台协助行李处理',cids:[4]},{title:'发送出发群报备消息',time:'10:30',note:'中英文双版本',cids:[]},{title:'确认所有房卡已退还',time:'11:00',note:'逐一核查退房',cids:[4,5]},{title:'CZ3441大批量送机集合（8人）',time:'16:30',note:'ALBERTO等8人集合',cids:[10,2,3]},{title:'最终清点人员离境',time:'23:30',note:'确认全员安全登机',cids:[]}].forEach(e=>{events.push({id:nextId++,type:'temp',cat:'general',title:e.title,time:e.time,endTime:'',date:'2026-04-18',location:'',note:e.note,status:'pending',followCount:0,remindBefore:60,cids:e.cids});});
+
+const hotelRooms=[
+  {room:'607',name:'Macuei, Akon Rose Paul',floor:'6F',arr:'MU2566',dep:''},{room:'1022',name:'Luol Deng',floor:'10F套房',arr:'CZ3544',dep:'CZ3544'},
+  {room:'1110',name:'EVALUBA TABAN',floor:'11F',arr:'CZ-3348',dep:''},{room:'1112',name:'KORABA KAMBAYA',floor:'11F',arr:'CZ-3348',dep:''},{room:'1117',name:'JULIA AKOT',floor:'11F',arr:'CZ-659',dep:''},{room:'1122',name:'胡琪（治疗房）',floor:'11F',arr:'',dep:''},
+  {room:'1202',name:'Nyamouch Pidor Teny',floor:'12F',arr:'CZ-6608',dep:''},{room:'1205',name:'Susan Ayaa',floor:'12F',arr:'KE165',dep:''},{room:'1206',name:'Nyamer Lual Diew',floor:'12F',arr:'LH7110',dep:''},{room:'1207',name:'Yar Garang Mayen',floor:'12F',arr:'CZ-8520',dep:''},{room:'1209',name:'Maria Gakdeng',floor:'12F',arr:'CZ-3580',dep:''},{room:'1210',name:'Adut Bulgak',floor:'12F',arr:'CZ-3346',dep:''},{room:'1212',name:'Sarah Ameer Deng',floor:'12F',arr:'KE165',dep:''},{room:'1218',name:'Anegor Wol',floor:'12F',arr:'AF5219',dep:''},{room:'1220',name:'Leime Perina',floor:'12F',arr:'CZ-6589',dep:''},{room:'1222',name:'Gony/Nyayongah Wiyual',floor:'12F',arr:'',dep:''},{room:'1225',name:'DENG AJOU DENG',floor:'12F',arr:'CZ-659',dep:''},
+  {room:'1502',name:'Steven J Vear',floor:'15F',arr:'CZ6608',dep:''},{room:'1505',name:'ALBERTO CARRILLO',floor:'15F',arr:'CZ-6589',dep:''},{room:'1506',name:'PEDRO RIVERODELCAZ',floor:'15F',arr:'CZ-6589',dep:''},{room:'1507',name:'Marcus Wong',floor:'15F',arr:'CZ-6589',dep:''},{room:'1509',name:'Wal Paul Puk',floor:'15F',arr:'CZ-3824',dep:''},{room:'1512',name:'ALBERTO ANTUNA',floor:'15F',arr:'CZ-6589',dep:''},{room:'1525',name:'Piath Gabriel',floor:'15F',arr:'CZ-6589',dep:''},
+];
+
+let currentNav='schedule',currentView='day',selType='core',cRoleFilter='all',selRole='driver',rpIdx=0;
+let dailyComments={}; // key: dateStr, value: string
+
+function gc(id){return contacts.find(c=>c.id===id);}
+function sortedByTime(ds){return[...events].filter(e=>e.date===ds).sort((a,b)=>a.time.localeCompare(b.time));}
+function findNext(s){const t=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');return(s.find(e=>e.status!=='done'&&e.date===todayStr&&e.time>=t)||{}).id;}
+function saveComment(val){dailyComments[currentDate]=val;}
+
+function openEditEvent(id){
+  const ev=events.find(e=>e.id===id);if(!ev)return;
+  const selIds=ev.cids||[];
+  const selContacts=contacts.filter(c=>selIds.includes(c.id));
+  const unselContacts=contacts.filter(c=>!selIds.includes(c.id));
+
+  const renderCRow=(c,prefix,checked)=>{
+    const m=ROLE_META[c.role];
+    return`<div class="cp-row" id="crow_${prefix}_${c.id}">
+      <span style="display:flex;align-items:center;gap:6px;font-size:13px;">${m.icon} ${c.name}
+        <span style="font-size:10px;background:${m.bg};color:${m.color};padding:1px 5px;border-radius:5px;">${m.label}</span>
+        ${c.role==='driver'&&c.special?.plate?`<span style="font-size:10px;color:var(--cp);font-weight:700;">🚗${c.special.plate}</span>`:''}
+      </span>
+      <input type="checkbox" class="cp-check" id="ec_${c.id}" ${checked?'checked':''}>
+    </div>`;
+  };
+
+  const selHtml = selContacts.length
+    ? `<div style="margin-bottom:6px;font-size:11px;color:var(--cs);font-weight:700;">已关联（${selContacts.length}）</div>`
+      + selContacts.map(c=>renderCRow(c,'e',true)).join('')
+      + `<div style="border-top:1px dashed var(--bd);margin:8px 0;"></div>`
+    : '';
+  const unselHtml = unselContacts.length
+    ? `<div style="margin-bottom:6px;font-size:11px;color:var(--text3);font-weight:700;">其他联系人</div>`
+      + unselContacts.map(c=>renderCRow(c,'e',false)).join('')
+    : '';
+
+  document.getElementById('modalContainer').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hdr"><div class="modal-title">编辑事项</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><div class="form-label">事项名称</div><input class="form-input" id="en_title" value="${ev.title}"></div>
+      <div class="form-row">
+        <div class="form-group"><div class="form-label">日期</div><input class="form-input" type="date" id="en_date" value="${ev.date}"></div>
+        <div class="form-group"><div class="form-label">开始时间</div><input class="form-input" type="time" id="en_time" value="${ev.time}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><div class="form-label">结束时间</div><input class="form-input" type="time" id="en_end" value="${ev.endTime||''}"></div>
+        <div class="form-group"><div class="form-label">提前提醒</div>
+          <select class="form-input" id="en_remind">
+            <option value="0" ${ev.remindBefore===0?'selected':''}>无须提醒</option>
+            <option value="10" ${ev.remindBefore===10?'selected':''}>提前10分钟</option>
+            <option value="30" ${ev.remindBefore===30?'selected':''}>提前30分钟</option>
+            <option value="60" ${ev.remindBefore===60?'selected':''}>提前1小时</option>
+            <option value="120" ${ev.remindBefore===120?'selected':''}>提前2小时</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><div class="form-label">地点</div><input class="form-input" id="en_loc" value="${ev.location||''}"></div>
+      <div class="form-group"><div class="form-label">备注</div><textarea class="form-input" id="en_note" rows="2">${ev.note||''}</textarea></div>
+      <div class="form-group"><div class="form-label">关联联系人</div>
+        <div style="border:1px solid var(--bd);border-radius:10px;padding:10px;max-height:220px;overflow-y:auto;">
+          ${selHtml}${unselHtml}
+          ${!selHtml&&!unselHtml?'<div style="font-size:12px;color:var(--text3);text-align:center;padding:8px;">暂无联系人</div>':''}
+        </div>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <button class="btn-p" onclick="saveEditEvent(${ev.id})">保存修改</button>
+      <button class="btn-s" style="color:var(--cr);border-color:var(--cr);" onclick="deleteEvent(${ev.id})">删除事项</button>
+      <button class="btn-s" onclick="closeModal()">取消</button>
+    </div>
+  </div></div>`;
+}
+
+function saveEditEvent(id){
+  const ev=events.find(e=>e.id===id);if(!ev)return;
+  ev.title=document.getElementById('en_title')?.value?.trim()||ev.title;
+  ev.date=document.getElementById('en_date')?.value||ev.date;
+  ev.time=document.getElementById('en_time')?.value||ev.time;
+  ev.endTime=document.getElementById('en_end')?.value||'';
+  ev.location=document.getElementById('en_loc')?.value||'';
+  ev.note=document.getElementById('en_note')?.value||'';
+  ev.remindBefore=parseInt(document.getElementById('en_remind')?.value||0);
+  ev.cids=contacts.filter(c=>document.getElementById('ec_'+c.id)?.checked).map(c=>c.id);
+  currentDate=ev.date;
+  closeModal();render();
+}
+
+function deleteEvent(id){
+  // Replace modal content with inline confirmation
+  const ftr=document.querySelector('.modal-ftr');
+  if(!ftr)return;
+  ftr.innerHTML=`
+    <div style="width:100%;background:var(--crb);border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <span style="font-size:13px;color:var(--cr);font-weight:500;">确认删除此事项？</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-p" style="background:var(--cr);padding:6px 16px;" onclick="confirmDeleteEvent(${id})">确认删除</button>
+        <button class="btn-s" onclick="openEditEvent(${id})">取消</button>
+      </div>
+    </div>`;
+}
+
+function confirmDeleteEvent(id){
+  events=events.filter(e=>e.id!==id);
+  closeModal();render();
+}
+
+function switchNav(nav){currentNav=nav;document.querySelectorAll('.nav-tab').forEach((t,i)=>{t.className='nav-tab'+(['schedule','flights','contacts','hotel','messages','add'][i]===nav?' active':'');});render();}
+
+function render(){
+  let h='';
+  if(currentNav==='schedule')h=renderSchedule();
+  else if(currentNav==='flights')h=renderFlights();
+  else if(currentNav==='contacts')h=renderContacts();
+  else if(currentNav==='hotel')h=renderHotel();
+  else if(currentNav==='messages')h=renderMessages();
+  else h=renderAdd();
+  document.getElementById('mainContent').innerHTML=h;
+  const viewD=new Date(currentDate);
+  document.getElementById('topDate').textContent=viewD.getFullYear()+'年'+(viewD.getMonth()+1)+'月'+viewD.getDate()+'日 周'+DAYS[viewD.getDay()];
+}
+
+function prevDay(){const d=new Date(currentDate);d.setDate(d.getDate()-1);currentDate=d.toISOString().slice(0,10);render();}
+function nextDay(){const d=new Date(currentDate);d.setDate(d.getDate()+1);currentDate=d.toISOString().slice(0,10);render();}
+function jumpToDate(v){if(v){currentDate=v;render();}}
+
+function renderSchedule(){
+  const s=sortedByTime(currentDate),done=s.filter(e=>e.status==='done').length,foll=s.filter(e=>e.status==='follow').length,nxt=findNext(s);
+  const viewD=new Date(currentDate);
+  const dateLabel=viewD.getFullYear()+'年'+(viewD.getMonth()+1)+'月'+viewD.getDate()+'日';
+  const hasEvents=s.length>0;
+  let h=`<div class="view-toggle">
+    <button class="view-btn ${currentView==='day'?'active':''}" onclick="setView('day')">日</button>
+    <button class="view-btn ${currentView==='week'?'active':''}" onclick="setView('week')">周</button>
+    <button class="view-btn ${currentView==='month'?'active':''}" onclick="setView('month')">月</button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:4px;">
+      <button onclick="prevDay()" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--bd);background:transparent;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">‹</button>
+      <input type="date" value="${currentDate}" onchange="jumpToDate(this.value)" style="border:1px solid var(--bd);border-radius:7px;padding:3px 6px;font-size:11px;background:transparent;color:var(--text);font-family:inherit;cursor:pointer;">
+      <button onclick="nextDay()" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--bd);background:transparent;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">›</button>
+    </div>
+  </div><div class="content">
+  <div class="stats">
+    <div class="stat"><div class="stat-num">${s.length}</div><div class="stat-lbl">${dateLabel} 事项</div></div>
+    <div class="stat"><div class="stat-num" style="color:var(--cs)">${done}</div><div class="stat-lbl">已完成</div></div>
+    <div class="stat"><div class="stat-num" style="color:var(--ca)">${foll}</div><div class="stat-lbl">跟进中</div></div>
+  </div>`;
+  if(currentView==='day')h+=renderTimeline(s,nxt);
+  else if(currentView==='week')h+=renderWeek();
+  else h+=renderMonth();
+  return h+'</div>';
+}
+
+function getEventIcon(ev){
+  const t=(ev.title+' '+(ev.note||'')).toLowerCase();
+  if(ev.cat==='arrival') return '✈️';
+  if(ev.cat==='departure') return '✈️';
+  if(/breakfast|早餐|早饭/.test(t)) return '🍳';
+  if(/lunch|午餐|午饭/.test(t)) return '🍱';
+  if(/dinner|晚餐|晚饭/.test(t)) return '🍽️';
+  if(/meal|餐|饮食|用餐/.test(t)) return '🍴';
+  if(/train|训练|体能|战术|练习/.test(t)) return '🏀';
+  if(/hotel|酒店|入住|房卡|check.?in/.test(t)) return '🏨';
+  if(/meeting|会议|开会/.test(t)) return '📋';
+  if(/car|bus|巴士|大巴|车辆|送车|乘车/.test(t)) return '🚌';
+  if(/airport|机场|接机|送机/.test(t)) return '🛫';
+  if(/medical|冰浴|冰块|治疗|队医|ice/.test(t)) return '🧊';
+  if(/report|报备|通知|群发|消息/.test(t)) return '📢';
+  if(/room|房间|退房|行李/.test(t)) return '🧳';
+  if(/清点|check|confirm|确认/.test(t)) return '✅';
+  if(/call|电话|致电|联系/.test(t)) return '📞';
+  return '📌';
+}
+
+function renderTimeline(s,nxt){
+  const comment = dailyComments[currentDate]||'';
+  let cards = '';
+  if(!s.length){
+    cards = '<div class="empty">暂无事项，点击「录入」添加</div>';
+  } else {
+    cards = '<div class="timeline">'+s.map((ev,i)=>{
+      const isDone=ev.status==='done',isNxt=ev.id===nxt,isFoll=ev.status==='follow',isArr=ev.cat==='arrival',isDep=ev.cat==='departure';
+      const dotCls=isDone?'done':isNxt?'nxt':isArr?'arr':ev.type;
+      const cardCls=isDone?'done':isNxt?'nxt':isArr?'arr-card':'';
+      const icon=getEventIcon(ev);
+      let typeBadge='';
+      if(isDep) typeBadge=`<span class="badge core">✈ 送机</span>`;
+      else if(isArr) typeBadge=`<span class="badge arr">✈ 接机</span>`;
+      else if(ev.type==='core') typeBadge=`<span class="badge core">核心行程</span>`;
+      else typeBadge=`<span class="badge temp">临时事项</span>`;
+      let badges=typeBadge;
+      if(isNxt) badges+='<span class="badge nxt">▶ 下一项</span>';
+      if(isDone) badges+='<span class="badge done">已完成</span>';
+      else if(isFoll) badges+='<span class="badge foll">跟进中</span>';
+      else if(!isNxt) badges+='<span class="badge pend">待处理</span>';
+      const chips=(ev.cids||[]).map(cid=>{
+        const c=gc(cid);if(!c)return'';
+        const m=ROLE_META[c.role];
+        return`<div class="cchip" onclick="event.stopPropagation();openContactDetail(${c.id})"><div class="cchip-dot" style="background:${m.color}"></div><span>${c.name}</span>${c.role==='driver'&&c.special?.plate?`<span style="color:var(--cp);font-weight:700;font-size:10px;">${c.special.plate}</span>`:''}</div>`;
+      }).join('');
+      return`<div class="tl-item">
+        <div class="tl-left"><div class="tl-time">${ev.time}</div></div>
+        <div class="tl-mid"><div class="dot ${dotCls}"></div>${i<s.length-1?'<div class="line"></div>':''}</div>
+        <div class="tl-right"><div class="card ${cardCls}" onclick="openDetail(${ev.id})">
+          <div style="font-size:18px;flex-shrink:0;margin-top:1px;">${icon}</div>
+          <div class="card-main">
+            <div class="card-title ${isDone?'done':''}">${ev.title}</div>
+            ${(isDep||isArr)&&ev.flight?`<div class="card-meta">✈ ${ev.flight}${ev.origin?' · '+ev.origin:''}</div>`:''}
+            ${ev.location?`<div class="card-meta">📍 ${ev.location}</div>`:''}
+            ${ev.pax?.length?`<div class="card-meta">👥 ${ev.pax.slice(0,2).join('、')}${ev.pax.length>2?' 等'+ev.pax.length+'人':''}</div>`:ev.contact?`<div class="card-meta">👤 ${ev.contact}</div>`:''}
+            <div class="card-badges">${badges}</div>
+            ${chips?`<div class="contact-chips">${chips}</div>`:''}
+            ${ev.followCount>0?`<div class="follow-cnt">已跟进 ${ev.followCount} 次</div>`:''}
+          </div>
+          <div class="card-actions">
+            <button class="act-btn" onclick="event.stopPropagation();openEditEvent(${ev.id})" style="color:var(--cp);border-color:var(--cp);">编辑</button>
+            ${!isDone?`<button class="act-btn ok" onclick="event.stopPropagation();completeEv(${ev.id})">完成</button>`:''}
+            ${!isDone&&!isFoll?`<button class="act-btn fo" onclick="event.stopPropagation();followEv(${ev.id})">跟进</button>`:''}
+            ${isFoll?`<button class="act-btn fo" onclick="event.stopPropagation();followEv(${ev.id})">再提醒</button>`:''}
+          </div>
+        </div></div>
+      </div>`;
+    }).join('')+'</div>';
+  }
+
+  // Daily comment box at bottom
+  const commentBox=`<div style="margin-top:16px;border-top:1px solid var(--bd);padding-top:14px;">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">📝 今日备注</div>
+    <textarea id="dailyComment" rows="3"
+      style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--bd);font-size:13px;background:var(--bg);color:var(--text);font-family:inherit;resize:vertical;line-height:1.6;"
+      placeholder="记录今日重要信息、临时决定、注意事项..."
+      onchange="saveComment(this.value)"
+      oninput="saveComment(this.value)">${comment}</textarea>
+  </div>`;
+
+  return cards + commentBox;
+}
+
+function renderWeek(){
+  const ws=new Date(now);ws.setDate(now.getDate()-now.getDay());
+  let h='<div class="week-grid">';
+  for(let i=0;i<7;i++){const d=new Date(ws);d.setDate(ws.getDate()+i);const ds=d.toISOString().slice(0,10),it=ds===todayStr,de=events.filter(e=>e.date===ds);
+  h+=`<div class="wday"><div class="wday-lbl">${DAYS[d.getDay()]}</div>${it?`<div class="wday-num today">${d.getDate()}</div>`:`<div class="wday-num">${d.getDate()}</div>`}${de.filter(e=>e.cat==='departure').slice(0,2).map(()=>'<div class="wdot core"></div>').join('')}${de.filter(e=>e.cat==='arrival').slice(0,2).map(()=>'<div class="wdot arr"></div>').join('')}${de.filter(e=>e.type==='temp').slice(0,2).map(()=>'<div class="wdot temp"></div>').join('')}</div>`;}
+  return h+'</div>'+renderTimeline(sortedByTime(currentDate),findNext(sortedByTime(currentDate)));
+}
+function renderMonth(){
+  const fd=new Date(2026,3,1),ld=new Date(2026,4,0);
+  let h=`<div style="font-size:14px;font-weight:700;margin-bottom:10px;">2026年 四月</div><div class="month-hdr">${DAYS.map(d=>`<div class="mhd">${d}</div>`).join('')}</div><div class="month-grid">`;
+  const sp=fd.getDay();for(let i=0;i<sp;i++){const d=new Date(fd);d.setDate(d.getDate()-(sp-i));h+=`<div class="mcell"><div class="mcell-num other">${d.getDate()}</div></div>`;}
+  for(let d=1;d<=ld.getDate();d++){const ds=`2026-04-${String(d).padStart(2,'0')}`,it=ds===todayStr,de=events.filter(e=>e.date===ds);
+  h+=`<div class="mcell">${it?`<div class="mcell-num today">${d}</div>`:`<div class="mcell-num">${d}</div>`}${de.filter(e=>e.cat==='departure').slice(0,1).map(()=>'<div class="mdot core"></div>').join('')}${de.filter(e=>e.cat==='arrival').slice(0,1).map(()=>'<div class="mdot arr"></div>').join('')}</div>`;}
+  return h+'</div>';
+}
+
+function renderContacts(){
+  const roles=['all','driver','hotel','coach','medical','airline','official','other'];
+  const rl={all:'全部'};Object.entries(ROLE_META).forEach(([k,v])=>rl[k]=v.label);
+  const filtered=cRoleFilter==='all'?contacts:contacts.filter(c=>c.role===cRoleFilter);
+  let h=`<div class="content">
+  <button class="add-contact-btn" onclick="openAddContact()">＋ 添加新联系人</button>
+  <div class="role-filter">`;
+  roles.forEach(r=>{
+    const m=r==='all'?{color:'var(--cp)',bg:'var(--cpb)'}:ROLE_META[r];
+    const a=cRoleFilter===r;
+    h+=`<button class="role-pill ${a?'active':''}" style="${a?`background:${m.bg};color:${m.color};border-color:${m.color}`:''}" onclick="setCRF('${r}')">${rl[r]}</button>`;
+  });
+  h+=`</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">共 ${filtered.length} 位联系人</div>`;
+  filtered.forEach(c=>{
+    const m=ROLE_META[c.role];
+    h+=`<div class="contact-card">
+      <div class="cc-top">
+        <div class="avatar" style="background:${m.bg};color:${m.color};cursor:pointer;" onclick="openContactDetail(${c.id})">${m.icon}</div>
+        <div style="flex:1;cursor:pointer;" onclick="openContactDetail(${c.id})">
+          <div class="cc-name">${c.name}</div>
+          <div class="cc-role" style="color:${m.color}">${m.label}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${c.phone?`<button class="call-btn" onclick="callContact('${c.phone}')">📞</button>`:''}
+          <button onclick="openEditContact(${c.id})" style="padding:5px 10px;border-radius:8px;border:1px solid var(--cp);background:transparent;color:var(--cp);font-size:12px;cursor:pointer;font-family:inherit;">编辑</button>
+          <button onclick="confirmDeleteContact(${c.id})" style="padding:5px 10px;border-radius:8px;border:1px solid var(--cr);background:transparent;color:var(--cr);font-size:12px;cursor:pointer;font-family:inherit;">删除</button>
+        </div>
+      </div>
+      <div class="cf-grid" style="cursor:pointer;" onclick="openContactDetail(${c.id})">
+        ${c.phone?`<div class="cf"><div class="cf-lbl">电话</div><div class="cf-val hi">${c.phone}</div></div>`:''}
+        ${c.wechat?`<div class="cf"><div class="cf-lbl">微信</div><div class="cf-val">${c.wechat}</div></div>`:''}
+        ${c.role==='driver'&&c.special?.plate?`<div class="cf sp"><div class="cf-lbl">🚗 车牌号</div><div class="cf-val">${c.special.plate}</div></div>`:''}
+        ${c.role==='driver'&&c.special?.vehicleType?`<div class="cf sp"><div class="cf-lbl">车型</div><div class="cf-val">${c.special.vehicleType}</div></div>`:''}
+        ${c.role==='hotel'&&c.special?.extension?`<div class="cf sp"><div class="cf-lbl">分机号</div><div class="cf-val">${c.special.extension}</div></div>`:''}
+        ${c.role==='hotel'&&c.special?.position?`<div class="cf"><div class="cf-lbl">职位</div><div class="cf-val">${c.special.position}</div></div>`:''}
+        ${c.role==='official'&&c.special?.vipRoom?`<div class="cf sp"><div class="cf-lbl">房间</div><div class="cf-val">${c.special.vipRoom}</div></div>`:''}
+        ${c.role==='official'&&c.special?.title?`<div class="cf"><div class="cf-lbl">职衔</div><div class="cf-val">${c.special.title}</div></div>`:''}
+        ${c.role==='medical'&&c.special?.treatmentRoom?`<div class="cf sp"><div class="cf-lbl">治疗室</div><div class="cf-val">${c.special.treatmentRoom}</div></div>`:''}
+        ${c.role==='airline'&&c.special?.counter?`<div class="cf"><div class="cf-lbl">值机柜台</div><div class="cf-val">${c.special.counter}</div></div>`:''}
+        ${c.role==='airline'&&c.special?.airline?`<div class="cf"><div class="cf-lbl">航空公司</div><div class="cf-val">${c.special.airline}</div></div>`:''}
+        ${c.note?`<div class="cf cf-full"><div class="cf-lbl">备注</div><div class="cf-val">${c.note}</div></div>`:''}
+      </div>
+    </div>`;
+  });
+  if(!filtered.length) h+=`<div class="empty">暂无联系人，点击上方按钮添加</div>`;
+  return h+'</div>';
+}
+function setCRF(r){cRoleFilter=r;render();}
+
+function confirmDeleteContact(id){
+  const c=gc(id);if(!c)return;
+  if(!confirm(`确认删除联系人「${c.name}」？\n\n此操作不可撤销，关联该联系人的事项将自动解除关联。`))return;
+  // Remove from all events
+  events.forEach(ev=>{if(ev.cids)ev.cids=ev.cids.filter(cid=>cid!==id);});
+  contacts=contacts.filter(ct=>ct.id!==id);
+  render();
+}
+
+function spBox(color,bg,fields){
+  const rows=Object.entries(fields).filter(([,v])=>v).map(([k,v])=>`<div><div style="font-size:10px;color:${color};font-weight:700;">${k}</div><div style="font-size:${k==='车牌号'||k==='房间'||k==='分机号'?'15':'13'}px;font-weight:${k==='车牌号'||k==='房间'||k==='分机号'?'700':'500'};color:${color};margin-top:2px;">${v}</div></div>`).join('');
+  if(!rows)return'';
+  return`<div style="background:${bg};border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">${rows}</div>`;
+}
+
+function openContactDetail(id){
+  const c=gc(id);if(!c)return;
+  const m=ROLE_META[c.role],sp=c.special||{};
+  let spHtml='';
+  if(c.role==='driver')spHtml=spBox(m.color,m.bg,{'🚗 车牌号':sp.plate,'车型':sp.vehicleType,'载客量':sp.capacity,'负责区域':sp.area});
+  else if(c.role==='hotel')spHtml=spBox(m.color,m.bg,{'职位':sp.position,'分机号':sp.extension,'房卡权限':sp.roomAuth,'办理权限':sp.checkInAuth});
+  else if(c.role==='official')spHtml=spBox(m.color,m.bg,{'职衔':sp.title,'房间':sp.vipRoom,'护照':sp.passport,'优先级':sp.priority});
+  else if(c.role==='medical')spHtml=spBox(m.color,m.bg,{'资质':sp.qualification,'治疗室':sp.treatmentRoom,'专业':sp.specialty,'设备':sp.equipment});
+  else if(c.role==='airline')spHtml=spBox(m.color,m.bg,{'航空公司':sp.airline,'值机柜台':sp.counter,'团体注意':sp.groupContact,'':''});
+  else if(c.role==='coach')spHtml=spBox(m.color,m.bg,{'执教资质':sp.qualification,'国籍':sp.nationality,'护照':sp.passport,'':''});
+  const linked=events.filter(e=>(e.cids||[]).includes(id));
+  document.getElementById('modalContainer').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hdr"><div style="display:flex;align-items:center;gap:10px;"><div class="avatar" style="width:36px;height:36px;font-size:14px;background:${m.bg};color:${m.color}">${m.icon}</div><div><div class="modal-title">${c.name}</div><div style="font-size:12px;color:${m.color};font-weight:700;">${m.label}</div></div></div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${c.phone?`<button class="call-btn" style="flex:1;justify-content:center;" onclick="callContact('${c.phone}')">📞 ${c.phone}</button>`:''}
+        ${c.wechat?`<button class="wechat-btn" style="flex:1;justify-content:center;" onclick="alert('微信号：${c.wechat}')">💬 ${c.wechat}</button>`:''}
+      </div>
+      ${c.email?`<div style="font-size:12px;color:var(--text3);">✉ ${c.email}</div>`:''}
+      ${spHtml}
+      ${c.note?`<div style="background:var(--bg);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--text2);">${c.note}</div>`:''}
+      ${linked.length?`<div><div class="sec">关联事项（${linked.length}）</div>${linked.map(ev=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border-radius:8px;margin-bottom:4px;font-size:12px;"><span style="color:var(--text3)">${ev.date} ${ev.time}</span><span style="flex:1">${ev.title}</span><span class="badge ${ev.status==='done'?'done':ev.status==='follow'?'foll':'pend'}">${ev.status==='done'?'完成':ev.status==='follow'?'跟进':'待处理'}</span></div>`).join('')}</div>`:''}
+    </div>
+    <div class="modal-ftr">
+      <button class="btn-p" onclick="closeModal();openEditContact(${c.id})">✏️ 编辑</button>
+      <button class="btn-s" style="color:var(--cr);border-color:var(--cr);" onclick="closeModal();confirmDeleteContact(${c.id})">🗑 删除</button>
+      <button class="btn-s" onclick="closeModal()">关闭</button>
+    </div>
+  </div></div>`;
+}
+function callContact(p){window.location.href='tel:'+p;}
+
+function openAddContact(){selRole='driver';showContactForm(null);}
+function openEditContact(id){const c=gc(id);if(c){selRole=c.role;showContactForm(c);}}
+
+function showContactForm(c){
+  const isEdit=!!c,sp=c?.special||{};
+  const roleOpts=['driver','hotel','coach','medical','airline','official','other'];
+  document.getElementById('modalContainer').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hdr"><div class="modal-title">${isEdit?'编辑联系人':'添加联系人'}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><div class="form-label">角色 *</div><div class="role-grid" id="roleGrid">${roleOpts.map(r=>`<button class="role-opt ${(c?c.role:selRole)===r?'sel':''}" onclick="selectRole('${r}',this)">${ROLE_META[r].icon} ${ROLE_META[r].label}</button>`).join('')}</div></div>
+      <div class="form-group"><div class="form-label">姓名 *</div><input class="form-input" id="cf_name" value="${c?.name||''}" placeholder="联系人姓名"></div>
+      <div class="form-row"><div class="form-group"><div class="form-label">电话/手机</div><input class="form-input" id="cf_phone" value="${c?.phone||''}" placeholder="+86 / 区号+号码"></div><div class="form-group"><div class="form-label">微信号</div><input class="form-input" id="cf_wechat" value="${c?.wechat||''}" placeholder="微信号"></div></div>
+      <div class="form-group"><div class="form-label">邮箱</div><input class="form-input" id="cf_email" value="${c?.email||''}" placeholder="email@example.com"></div>
+      <div id="spWrap">${renderSPF(c?c.role:selRole,sp)}</div>
+      <div class="form-group"><div class="form-label">备注</div><textarea class="form-input" id="cf_note" rows="2">${c?.note||''}</textarea></div>
+    </div>
+    <div class="modal-ftr"><button class="btn-p" onclick="saveContact(${isEdit?c.id:'null'})">${isEdit?'保存修改':'添加'}</button><button class="btn-s" onclick="closeModal()">取消</button></div>
+  </div></div>`;
+}
+
+function renderSPF(role,sp){
+  sp=sp||{};
+  const wrap=(inner)=>`<div class="sp-fields">${inner}</div>`;
+  const fi=(id,lbl,val,ph)=>`<div class="form-group"><div class="form-label">${lbl}</div><input class="form-input" id="sf_${id}" value="${val||''}" placeholder="${ph}"></div>`;
+  const fr2=(a,b)=>`<div class="form-row">${a}${b}</div>`;
+  if(role==='driver')return wrap(fr2(fi('plate','🚗 车牌号 *',sp.plate,'鄂A·12345'),fi('vehicleType','车型',sp.vehicleType,'丰田埃尔法'))+fr2(fi('capacity','载客量',sp.capacity,'7人'),fi('area','负责区域',sp.area,'武汉全程')));
+  if(role==='hotel')return wrap(fr2(fi('position','职位',sp.position,'驻店经理'),fi('extension','分机号',sp.extension,'8001'))+fi('roomAuth','房卡权限',sp.roomAuth,'11F/12F/15F')+fi('checkInAuth','办理权限',sp.checkInAuth,'可团体入住'));
+  if(role==='official')return wrap(fi('title','职衔',sp.title,'主席/团长')+fr2(fi('vipRoom','房间号',sp.vipRoom,'1022'),fi('passport','护照号',sp.passport,'SS1234')));
+  if(role==='medical')return wrap(fr2(fi('qualification','执业资质',sp.qualification,'执业医师'),fi('treatmentRoom','治疗室',sp.treatmentRoom,'1122'))+fr2(fi('specialty','专业',sp.specialty,'运动医学'),fi('equipment','设备',sp.equipment,'冰浴设备')));
+  if(role==='airline')return wrap(fi('airline','航空公司',sp.airline,'中国南方航空')+fi('counter','值机柜台',sp.counter,'T2 F-G区')+fi('groupContact','团体注意事项',sp.groupContact,'提前48小时预约'));
+  if(role==='coach')return wrap(fr2(fi('qualification','执教资质',sp.qualification,'FIBA Level 3'),fi('nationality','国籍',sp.nationality,'澳大利亚')));
+  return'';
+}
+
+function selectRole(r,el){selRole=r;document.querySelectorAll('.role-opt').forEach(b=>b.classList.remove('sel'));el.classList.add('sel');document.getElementById('spWrap').innerHTML=renderSPF(r,{});}
+function gv(id){return document.getElementById(id)?.value?.trim()||'';}
+function saveContact(editId){
+  const name=gv('cf_name');if(!name){alert('请填写姓名');return;}
+  const sp={};['plate','vehicleType','capacity','area','position','extension','roomAuth','checkInAuth','title','vipRoom','passport','qualification','treatmentRoom','specialty','equipment','airline','counter','groupContact','nationality','priority'].forEach(k=>{const v=gv('sf_'+k);if(v)sp[k]=v;});
+  const obj={role:selRole,name,phone:gv('cf_phone'),wechat:gv('cf_wechat'),email:gv('cf_email'),note:gv('cf_note'),special:sp};
+  if(editId!==null&&editId!==undefined&&String(editId)!=='null'){const i=contacts.findIndex(c=>c.id===editId);if(i>-1)contacts[i]={...contacts[i],...obj};}
+  else contacts.push({id:nextContactId++,...obj});
+  closeModal();render();
+}
+
+function renderFlights(){
+  let h='<div class="content">';
+  h+=`<div class="sec">4月18日 — 出发航班（${departures.length}班）</div>`;
+  departures.forEach(d=>{
+    const ctRow=(d.cids||[]).map(cid=>{const c=gc(cid);if(!c)return'';const m=ROLE_META[c.role];return`<div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid var(--bd);"><span style="font-size:10px;background:${m.bg};color:${m.color};padding:2px 6px;border-radius:6px;font-weight:700;">${m.icon} ${m.label}</span><span style="font-size:12px;font-weight:700;">${c.name}</span>${c.phone?`<span style="font-size:12px;color:var(--cp);">${c.phone}</span>`:''} ${c.role==='driver'&&c.special?.plate?`<span style="font-size:11px;background:var(--cpb);color:var(--cp);padding:2px 6px;border-radius:5px;font-weight:700;">🚗 ${c.special.plate}</span>`:''}</div>`;}).join('');
+    h+=`<div class="pax-list"><div class="pax-flight"><span style="background:var(--cpb);color:var(--cp);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;">${d.flight}</span><span>${d.time} · 武汉天河机场</span><span style="margin-left:auto;font-size:11px;color:var(--text3)">共${d.total}人</span></div>${d.pax.map(p=>{const room=hotelRooms.find(r=>r.name.toLowerCase().includes(p.toLowerCase().slice(0,5)));return`<div class="pax-row"><div style="flex:1">${p}</div>${room?`<span style="font-size:11px;color:var(--text3)">🚪${room.room}</span>`:''}</div>`;}).join('')}${ctRow}</div>`;
+  });
+  h+=`<div class="sec" style="margin-top:16px;">接机航班汇总</div>`;
+  const dates=[...new Set(arrivals.map(a=>a.date))].sort();
+  dates.forEach(date=>{
+    const da=arrivals.filter(a=>a.date===date);const d=new Date(date);
+    h+=`<div class="date-hdr">📅 ${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日</div>`;
+    da.forEach(a=>{
+      const ctRow=(a.cids||[]).map(cid=>{const c=gc(cid);if(!c)return'';const m=ROLE_META[c.role];return`<div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid var(--bd);"><span style="font-size:10px;background:${m.bg};color:${m.color};padding:2px 6px;border-radius:6px;font-weight:700;">${m.icon} ${m.label}</span><span style="font-size:12px;font-weight:700;">${c.name}</span>${c.phone?`<span style="font-size:12px;color:var(--cp);">${c.phone}</span>`:''} ${c.role==='driver'&&c.special?.plate?`<span style="font-size:11px;background:var(--cpb);color:var(--cp);padding:2px 6px;border-radius:5px;font-weight:700;">🚗 ${c.special.plate}</span>`:''}</div>`;}).join('');
+      h+=`<div class="pax-list"><div class="pax-flight"><span style="background:var(--purpleb);color:var(--purple);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;">${a.flight}</span><span>${a.time} · 来自${a.origin}</span></div>${a.pax.map(p=>`<div class="pax-row"><div style="flex:1">${p}</div></div>`).join('')}${ctRow}</div>`;
+    });
+  });
+  return h+'</div>';
+}
+
+function renderHotel(){
+  const hc=contacts.filter(c=>c.role==='hotel');
+  let h=`<div class="content"><div style="background:var(--csb);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--cs);line-height:1.8;">共 29 间客房 · 11F / 12F / 15F<br>治疗室：1122</div>`;
+  if(hc.length){h+=`<div class="sec">酒店对接联系人</div>`;hc.forEach(c=>{const m=ROLE_META[c.role];h+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--csb);border-radius:10px;margin-bottom:6px;cursor:pointer;" onclick="openContactDetail(${c.id})"><div style="font-size:20px;">🏨</div><div style="flex:1;"><div style="font-size:13px;font-weight:700;">${c.name}</div><div style="font-size:11px;color:var(--cs);">${c.special?.position||''}${c.special?.extension?' · 分机'+c.special.extension:''}</div></div>${c.phone?`<button class="call-btn" onclick="event.stopPropagation();callContact('${c.phone}')">📞 ${c.phone}</button>`:''}</div>`;});}
+  ['11F','12F','15F','6F','10F套房'].forEach(floor=>{
+    const rooms=hotelRooms.filter(r=>r.floor===floor);if(!rooms.length)return;
+    h+=`<div class="sec">${floor} 楼层</div><div class="hotel-grid">`;
+    rooms.forEach(r=>{h+=`<div class="hotel-card"><div class="hotel-room">🚪 ${r.room}</div><div class="hotel-name">${r.name}</div>${r.arr?`<div class="hotel-sub">到：${r.arr}</div>`:''}</div>`;});
+    h+='</div>';
+  });
+  return h+'</div>';
+}
+
+function renderMessages(){
+  const d1=contacts.filter(c=>c.role==='driver');
+  const rZh=`【行程报备 — 南苏丹队离境】
+日期：2026年4月18日 | 武汉天河国际机场
+
+主要出发航班：
+• 12:00 CZ8725 (Marcus Wong)
+• 12:50 KE166 (Nyayongah、Susan、Sarah)
+• 14:30 AF5295 (Anegor Wol)
+• 16:00 CZ8671 (Stephen J Vear)
+• 17:30 CZ8721 (Luol Deng等2人)
+• 18:25 CZ3441/2441 (8人大团)
+• 20:30 CZ8558 / 22:05 CZ8519 (共4人)
+
+司机安排：
+${d1.map(d=>d.name+' · '+d.phone+(d.special?.plate?' · 🚗'+d.special.plate:'')).join('\n')}
+
+请各相关方知悉，如有需要请及时联系对接人。`;
+  const rEn=`[Travel Report — South Sudan Team Departure]
+Date: April 18, 2026 | Wuhan Tianhe International Airport
+
+Key Departures:
+• 12:00 CZ8725 - Marcus Wong
+• 12:50 KE166 - 3 pax
+• 14:30 AF5295 - Anegor Wol
+• 17:30 CZ8721 - Luol Deng +1
+• 18:25 CZ3441/2441 - 8 pax (large group)
+• 20:30 CZ8558 / 22:05 CZ8519 - 4 pax
+
+Drivers: ${d1.map(d=>d.name+' '+d.phone+(d.special?.plate?' 🚗'+d.special.plate:'')).join(' / ')||'TBC'}
+
+Please be advised. Contact liaison if needed.`;
+  const hc=contacts.filter(c=>c.role==='hotel');
+  const hZh=`【酒店入住须知 — 南苏丹队】
+欢迎入住！
+
+🏨 楼层：球员11F/12F · 工作人员15F · 治疗室1122
+📶 WiFi：请联系前台获取密码
+🍽 用餐：早07:00-09:00 / 午12:00-14:00 / 晚18:00-20:00
+🧺 洗衣：治疗室1122洗衣篮
+
+酒店对接：${hc.map(c=>c.name+' '+c.phone+(c.special?.extension?' 分机'+c.special.extension:'')).join(' / ')||''}`;
+  const hEn=`[Hotel Check-in — South Sudan Team]
+🏨 Floors: Players 11F/12F · Staff 15F · Treatment 1122
+📶 WiFi: Ask front desk
+🍽 Meals: Breakfast 07:00 / Lunch 12:00 / Dinner 18:00
+Hotel contact: ${hc.map(c=>c.name+' '+c.phone).join(' / ')||''}`;
+  const tpls=[{key:'report',title:'离境群报备消息',zh:rZh,en:rEn},{key:'hotel',title:'酒店入住须知',zh:hZh,en:hEn}];
+  let h='<div class="content"><div style="display:flex;flex-direction:column;gap:12px;">';
+  tpls.forEach(t=>{h+=`<div><div class="sec">${t.title}</div><div class="msg-card"><div class="msg-lang-row"><button class="lang-btn active" id="lb_${t.key}_zh" onclick="toggleLang('${t.key}','zh')">中文</button><button class="lang-btn" id="lb_${t.key}_en" onclick="toggleLang('${t.key}','en')">English</button><button onclick="makeEditable('mb_${t.key}_zh','mb_${t.key}_en')" style="margin-left:auto;padding:3px 10px;font-size:11px;border-radius:10px;border:1px solid var(--bd);cursor:pointer;background:transparent;color:var(--text3);">编辑</button></div><div class="msg-box" id="mb_${t.key}_zh">${t.zh}</div><div class="msg-box" id="mb_${t.key}_en" style="display:none">${t.en}</div><button class="copy-btn" onclick="copyMsg('${t.key}')">复制消息</button></div></div>`;});
+  return h+'</div></div>';
+}
+function toggleLang(k,l){['zh','en'].forEach(x=>{document.getElementById(`lb_${k}_${x}`)?.classList[x===l?'add':'remove']('active');const b=document.getElementById(`mb_${k}_${x}`);if(b)b.style.display=x===l?'block':'none';});}
+function makeEditable(...ids){ids.forEach(id=>{const el=document.getElementById(id);if(el){el.contentEditable='true';el.style.border='1px solid var(--cp)';}});}
+function copyMsg(k){const zh=document.getElementById(`mb_${k}_zh`),en=document.getElementById(`mb_${k}_en`);const v=zh?.style.display!=='none'?zh:en;if(v&&navigator.clipboard)navigator.clipboard.writeText(v.innerText).then(()=>alert('✓ 已复制'));else alert('请手动复制');}
+
+let addTab='text'; // text | voice | doc
+let recognition=null, isRec=false, finalTranscript='';
+let parsedItems=[], xlsHeaders=[], xlsRows=[], colMap={};
+
+function renderAdd(){
+  const labels={text:'✏️ 文字输入', voice:'🎤 语音输入', doc:'📄 文件上传'};
+  const tabBtns=Object.entries(labels).map(([t,l])=>`<button class="imt ${addTab===t?'active':''}" onclick="switchAddTab('${t}')">${l}</button>`).join('');
+  let inner='';
+  if(addTab==='text') inner=renderAddText();
+  else if(addTab==='voice') inner=renderAddVoice();
+  else inner=renderAddDoc();
+  return`<div class="content"><div style="display:flex;gap:6px;margin-bottom:16px;">${tabBtns}</div>${inner}</div>`;
+}
+
+function filterContacts(query){
+  const q=query.toLowerCase().trim();
+  const rows=document.querySelectorAll('#contactList .cp-row');
+  rows.forEach(row=>{
+    const name=row.dataset.name||'';
+    const role=row.dataset.role||'';
+    row.style.display=(!q||name.includes(q)||role.includes(q))?'':'none';
+  });
+}
+function clearAllContacts(){
+  document.querySelectorAll('#contactList .cp-check').forEach(cb=>cb.checked=false);
+  const el=document.getElementById('selectedCount');
+  if(el)el.textContent='已选 0 位联系人';
+}
+function updateSelectedCount(){
+  const n=document.querySelectorAll('#contactList .cp-check:checked').length;
+  const el=document.getElementById('selectedCount');
+  if(el)el.textContent=`已选 ${n} 位联系人`;
+}
+
+function switchAddTab(t){
+  addTab=t;
+  stopVoice();
+  render();
+  // Proactively request mic permission when switching to voice tab
+  if(t==='voice' && location.protocol !== 'file:'){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(SR && navigator.mediaDevices){
+      navigator.mediaDevices.getUserMedia({audio:true})
+        .then(stream=>{
+          stream.getTracks().forEach(t=>t.stop());
+          const lbl=document.getElementById('micLbl');
+          const note=document.getElementById('micPermNote');
+          if(lbl) lbl.textContent='点击麦克风开始说话';
+          if(note) note.textContent='✅ 麦克风已授权 · 支持普通话';
+        })
+        .catch(err=>{
+          const lbl=document.getElementById('micLbl');
+          const note=document.getElementById('micPermNote');
+          if(lbl) lbl.textContent='麦克风权限被拒绝';
+          if(note) note.innerHTML=`权限被拒绝。<a href="chrome://settings/content/microphone" style="color:var(--cp);">点此打开设置</a>，将 localhost 加入允许列表后刷新页面`;
+        });
+    }
+  }
+}
+
+// ── TEXT ──
+function renderAddText(){
+  // Contact list: split into sections, with search filter
+  const cListHtml = contacts.map(c=>{
+    const m=ROLE_META[c.role];
+    return`<div class="cp-row" data-name="${c.name.toLowerCase()}" data-role="${m.label}">
+      <span style="display:flex;align-items:center;gap:6px;font-size:13px;">${m.icon} ${c.name}
+        <span style="font-size:10px;background:${m.bg};color:${m.color};padding:1px 5px;border-radius:5px;">${m.label}</span>
+        ${c.role==='driver'&&c.special?.plate?`<span style="font-size:10px;color:var(--cp);font-weight:700;">🚗${c.special.plate}</span>`:''}
+      </span>
+      <input type="checkbox" class="cp-check" id="ev_c_${c.id}" onclick="updateSelectedCount()">
+    </div>`;
+  }).join('');
+
+  return`<div class="form-group"><div class="form-label">事项类型</div><div class="type-toggle"><button class="type-btn ${selType==='core'?'ca':''}" onclick="setType(this,'core')">核心行程</button><button class="type-btn ${selType==='temp'?'cb':''}" onclick="setType(this,'temp')">临时事项</button></div></div>
+    <div class="form-group"><div class="form-label">事项名称 *</div><input class="form-input" id="nTitle" placeholder="如：送机 CZ8725..."></div>
+    <div class="form-row"><div class="form-group"><div class="form-label">日期 *</div><input class="form-input" type="date" id="nDate" value="${currentDate}"></div><div class="form-group"><div class="form-label">时间 *</div><input class="form-input" type="time" id="nTime"></div></div>
+    <div class="form-row"><div class="form-group"><div class="form-label">结束时间</div><input class="form-input" type="time" id="nEnd"></div><div class="form-group"><div class="form-label">提前提醒</div><select class="form-input" id="nRemind"><option value="0">无须提醒</option><option value="10">提前10分钟</option><option value="30" selected>提前30分钟</option><option value="60">提前1小时</option><option value="120">提前2小时</option></select></div></div>
+    <div class="form-group"><div class="form-label">地点</div><input class="form-input" id="nLoc" placeholder="武汉天河国际机场..."></div>
+    <div class="form-group"><div class="form-label">备注</div><textarea class="form-input" id="nNote" rows="2"></textarea></div>
+    <div class="form-group">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div class="form-label" style="margin:0;">关联联系人</div>
+        <button onclick="clearAllContacts()" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--cr);background:transparent;color:var(--cr);cursor:pointer;font-family:inherit;">清除全部</button>
+      </div>
+      <input type="text" placeholder="搜索联系人..." oninput="filterContacts(this.value)"
+        style="width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--bd);font-size:13px;background:transparent;color:var(--text);font-family:inherit;margin-bottom:6px;">
+      <div id="contactList" style="border:1px solid var(--bd);border-radius:10px;padding:8px;max-height:200px;overflow-y:auto;">
+        ${cListHtml}
+      </div>
+      <div id="selectedCount" style="font-size:11px;color:var(--text3);margin-top:4px;">已选 0 位联系人</div>
+    </div>
+    <button class="btn-p full" onclick="submitNew()" style="margin-top:4px;">保存事项</button>`;
+}
+
+// ── VOICE ──
+function renderAddVoice(){
+  const isFileProtocol = location.protocol === 'file:';
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if(isFileProtocol){
+    return`<div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:12px;padding:14px 16px;font-size:12px;color:#92400e;line-height:1.8;">
+        <strong>⚠️ 语音输入需要通过本地服务器打开</strong><br>
+        当前是 <code style="background:#fde68a;padding:1px 5px;border-radius:4px;">file://</code> 协议，Chrome 会封锁麦克风。<br><br>
+        <strong>启动方法：</strong>打开终端，cd 到文件夹，运行<br>
+        <code style="background:#fde68a;padding:2px 6px;border-radius:4px;display:inline-block;margin:4px 0;">python3 -m http.server 8080</code><br>
+        然后浏览器访问 <code style="background:#fde68a;padding:1px 5px;border-radius:4px;">http://localhost:8080/文件名.html</code>
+      </div>
+      <div class="form-group"><div class="form-label">或直接输入行程描述（效果相同）</div>
+        <textarea class="form-input" id="voiceTa" rows="5" placeholder="支持自然语言，例如：&#10;明天下午两点接机，首都机场T3，联系李司机"></textarea>
+      </div>
+      <button class="btn-p full" onclick="parseAndShow('voiceTa','voiceParsed')">识别并生成事项</button>
+      <div id="voiceParsed"></div>
+    </div>`;
+  }
+
+  if(!SR){
+    return`<div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="background:var(--crb);border-radius:12px;padding:14px 16px;font-size:13px;color:var(--cr);text-align:center;">
+        当前浏览器不支持语音识别，请使用 Chrome 或 Edge
+      </div>
+      <div class="form-group"><div class="form-label">直接输入行程描述</div>
+        <textarea class="form-input" id="voiceTa" rows="5" placeholder="支持自然语言，例如：&#10;明天下午两点接机，首都机场T3，联系李司机"></textarea>
+      </div>
+      <button class="btn-p full" onclick="parseAndShow('voiceTa','voiceParsed')">识别并生成事项</button>
+      <div id="voiceParsed"></div>
+    </div>`;
+  }
+
+  return`<div style="display:flex;flex-direction:column;gap:12px;">
+    <div style="border:1px dashed var(--cp);border-radius:12px;background:var(--cpb);padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:12px;">
+      <div style="font-size:13px;color:var(--cp);font-weight:700;text-align:center;" id="micLbl">正在请求麦克风权限...</div>
+      <button onclick="toggleVoice()" id="micBtnEl" style="width:64px;height:64px;border-radius:50%;background:var(--cp);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+      </button>
+      <div style="font-size:11px;color:var(--cp);opacity:.7;font-style:italic;min-height:16px;text-align:center;" id="interim"></div>
+      <div id="micPermNote" style="font-size:11px;color:var(--cp);opacity:.7;text-align:center;">支持普通话 · Chrome / Edge</div>
+    </div>
+    <div class="form-group">
+      <div class="form-label">转写内容（可直接编辑）</div>
+      <textarea class="form-input" id="voiceTa" rows="5"
+        placeholder="语音转写结果实时显示在此，也可直接手动输入&#10;&#10;示例：明天下午两点接机，首都机场T3，联系李司机"></textarea>
+    </div>
+    <button class="btn-p full" onclick="parseAndShow('voiceTa','voiceParsed')">识别并生成事项</button>
+    <div id="voiceParsed"></div>
+  </div>`;
+}
+
+function toggleVoice(){if(isRec)stopVoice();else startVoice();}
+function startVoice(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return;
+  recognition=new SR();
+  recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
+  finalTranscript=document.getElementById('voiceTa')?.value||'';
+  recognition.onstart=()=>{
+    isRec=true;
+    const btn=document.getElementById('micBtnEl'),lbl=document.getElementById('micLbl');
+    if(btn){btn.style.background='var(--cr)';btn.style.animation='pulse 1s ease-in-out infinite';}
+    if(lbl)lbl.textContent='录音中，点击停止...';
+  };
+  recognition.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal)finalTranscript+=e.results[i][0].transcript;
+      else interim+=e.results[i][0].transcript;
+    }
+    const ta=document.getElementById('voiceTa');if(ta)ta.value=finalTranscript+interim;
+    const it=document.getElementById('interim');if(it)it.textContent=interim?'识别中：'+interim:'';
+  };
+  recognition.onerror=e=>{
+    stopVoice();
+    const lbl=document.getElementById('micLbl');
+    if(e.error==='not-allowed'&&lbl)lbl.textContent='麦克风权限被拒绝，请在浏览器设置中允许';
+    else if(lbl)lbl.textContent='识别出错：'+e.error;
+  };
+  recognition.onend=()=>{if(isRec)stopVoice();};
+  recognition.start();
+}
+function stopVoice(){
+  isRec=false;
+  if(recognition){try{recognition.stop();}catch(e){}recognition=null;}
+  const btn=document.getElementById('micBtnEl'),lbl=document.getElementById('micLbl'),it=document.getElementById('interim');
+  if(btn){btn.style.background='var(--cp)';btn.style.animation='';}
+  if(lbl)lbl.textContent='点击麦克风开始说话';
+  if(it)it.textContent='';
+}
+
+// ── DOC ──
+function renderAddDoc(){
+  return`<div style="display:flex;flex-direction:column;gap:12px;">
+    <div id="dropZone" style="border:1px dashed var(--bd);border-radius:12px;background:var(--bg);padding:22px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;transition:all .15s;"
+      onclick="document.getElementById('fileInput').click()"
+      ondragover="event.preventDefault();this.style.borderColor='var(--cp)';this.style.background='var(--cpb)'"
+      ondragleave="this.style.borderColor='var(--bd)';this.style.background='var(--bg)'"
+      ondrop="handleDrop(event)">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <div style="font-size:13px;font-weight:700;color:var(--text);">点击选择 或 拖拽文件到此处</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;">
+        ${['PDF','Word','Excel','PPT','图片','TXT'].map(f=>`<span style="font-size:11px;padding:2px 7px;background:var(--card);border:1px solid var(--bd);border-radius:8px;color:var(--text3);">${f}</span>`).join('')}
+      </div>
+      <div style="font-size:11px;color:var(--text3);">自动识别行程字段，智能匹配录入</div>
+    </div>
+    <div id="fileResult"></div>
+  </div>`;
+}
+
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById('dropZone').style.borderColor='var(--bd)';
+  document.getElementById('dropZone').style.background='var(--bg)';
+  const f=e.dataTransfer?.files?.[0];if(f)processFile(f);
+}
+function handleFile(e){const f=e.target.files?.[0];if(f)processFile(f);e.target.value='';}
+
+function processFile(file){
+  const ext=file.name.split('.').pop().toLowerCase();
+  const el=document.getElementById('fileResult');if(!el)return;
+
+  if(['xlsx','xls','csv'].includes(ext)){
+    el.innerHTML=`<div style="background:var(--cpb);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--cp);">⏳ 正在读取 ${file.name}...</div>`;
+    const reader=new FileReader();
+    const onData=data=>{
+      try{
+        const wb=ext==='csv'?XLSX.read(data,{type:'string'}):XLSX.read(data,{type:'array',cellDates:true,dateNF:'yyyy-mm-dd'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+        if(!raw.length){el.innerHTML=`<div style="background:var(--crb);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--cr);">文件内容为空</div>`;return;}
+        const hdrIdx=raw.findIndex(r=>r.filter(c=>String(c).trim()).length>=2);
+        const hdrRow=raw[hdrIdx<0?0:hdrIdx];
+        const looksLikeHeader=hdrRow.some(c=>/[\u4e00-\u9fa5a-zA-Z]{2,}/.test(String(c)));
+        if(looksLikeHeader){xlsHeaders=hdrRow.map((c,i)=>String(c).trim()||`列${i+1}`);xlsRows=raw.slice(hdrIdx+1).filter(r=>r.some(c=>String(c).trim()));}
+        else{xlsHeaders=hdrRow.map((_,i)=>`列${i+1}`);xlsRows=raw.slice(hdrIdx).filter(r=>r.some(c=>String(c).trim()));}
+        colMap=autoDetectCols(xlsHeaders,xlsRows);
+        el.innerHTML=renderXlsUI(file.name);
+      }catch(err){el.innerHTML=`<div style="background:var(--crb);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--cr);">读取失败：${err.message}</div>`;}
+    };
+    if(ext==='csv'){const r=new FileReader();r.onload=ev=>onData(ev.target.result);r.readAsText(file,'UTF-8');}
+    else{const r=new FileReader();r.onload=ev=>onData(ev.target.result);r.readAsArrayBuffer(file);}
+
+  }else if(ext==='txt'){
+    const r=new FileReader();
+    r.onload=ev=>{
+      el.innerHTML=`<div style="background:var(--csb);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--cs);margin-bottom:8px;">✓ 已读取：${file.name}</div>
+        <div class="form-group"><div class="form-label">文件内容（可编辑修正）</div><textarea class="form-input" id="docTa" rows="6">${ev.target.result}</textarea></div>
+        <button class="btn-p full" style="margin-top:8px;" onclick="parseAndShow('docTa','docParsed')">识别并生成事项</button>
+        <div id="docParsed" style="margin-top:8px;"></div>`;
+    };r.readAsText(file,'UTF-8');
+
+  }else if(['jpg','jpeg','png','gif','webp'].includes(ext)){
+    const r=new FileReader();
+    r.onload=ev=>{
+      const dataUrl=ev.target.result;
+      const base64=dataUrl.split(',')[1];
+      const mtype=file.type||'image/jpeg';
+      el.innerHTML=`
+        <div style="background:var(--csb);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--cs);margin-bottom:8px;">✓ 已选择图片：${file.name}</div>
+        <img src="${dataUrl}" style="width:100%;max-height:180px;object-fit:contain;border-radius:8px;background:var(--bg);margin-bottom:8px;">
+        <div id="ocrStatus" style="background:var(--cpb);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--cp);text-align:center;margin-bottom:8px;">
+          <span id="ocrSpinner">⏳ 正在用 Claude AI 识别图片内容...</span>
+        </div>
+        <div class="form-group"><div class="form-label">识别结果（可编辑修正）</div>
+          <textarea class="form-input" id="imgTa" rows="5" placeholder="AI 识别结果将显示在此..."></textarea>
+        </div>
+        <button class="btn-p full" style="margin-top:8px;" onclick="parseAndShow('imgTa','imgParsed')">生成事项</button>
+        <div id="imgParsed" style="margin-top:8px;"></div>`;
+
+      // Call Claude API for OCR
+      callClaudeOCR(base64, mtype);
+    };
+    r.readAsDataURL(file);
+
+  }else if(['pdf','doc','docx','ppt','pptx'].includes(ext)){
+    el.innerHTML=`<div style="background:var(--csb);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--cs);margin-bottom:8px;">✓ 已选择：${file.name}</div>
+      <div style="background:var(--cab);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--ca);margin-bottom:8px;">.${ext} 格式需服务端解析。请将文档中的行程内容复制粘贴到下方：</div>
+      <div class="form-group"><div class="form-label">粘贴文档内容</div><textarea class="form-input" id="pasteTa" rows="6" placeholder="将 ${ext.toUpperCase()} 中的行程文字粘贴到此处..."></textarea></div>
+      <button class="btn-p full" style="margin-top:8px;" onclick="parseAndShow('pasteTa','pasteParsed')">识别并生成事项</button>
+      <div id="pasteParsed" style="margin-top:8px;"></div>`;
+  }else{
+    el.innerHTML=`<div style="background:var(--crb);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--cr);">不支持 .${ext} 格式，请上传 Excel / CSV / TXT / PDF / Word / 图片</div>`;
+  }
+}
+
+function renderXlsUI(fname){
+  const preview=xlsRows.slice(0,5);
+  const tbl=`<div style="overflow-x:auto;border:1px solid var(--bd);border-radius:8px;max-height:180px;overflow-y:auto;margin-bottom:10px;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>${xlsHeaders.map(h=>`<th style="background:var(--bg);padding:6px 10px;text-align:left;border-bottom:1px solid var(--bd);white-space:nowrap;font-weight:700;">${h}</th>`).join('')}</tr></thead><tbody>${preview.map(r=>`<tr>${xlsHeaders.map((_,i)=>`<td style="padding:5px 10px;border-bottom:1px solid var(--bd);white-space:nowrap;">${String(r[i]??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const fields=[{k:'flight',l:'航班/事项名称'},{k:'date',l:'日期'},{k:'time',l:'出发/起飞时间'},{k:'arrive',l:'抵达时间（可选）'},{k:'location',l:'地点/机场'},{k:'contact',l:'联系人/旅客'},{k:'note',l:'备注'}];
+  const selects=fields.map(f=>`<div style="display:grid;grid-template-columns:110px 1fr;gap:6px;align-items:center;font-size:12px;"><span style="color:var(--text2);">${f.l}</span><select id="map_${f.k}" style="padding:5px 8px;border-radius:7px;border:1px solid var(--bd);font-size:12px;background:transparent;color:var(--text);font-family:inherit;"><option value="">— 不映射 —</option>${xlsHeaders.map((h,i)=>`<option value="${i}" ${colMap[f.k]===i?'selected':''}>${h}</option>`).join('')}</select></div>`).join('');
+  return`<div style="background:var(--csb);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--cs);margin-bottom:8px;">✓ ${fname} — ${xlsRows.length} 行 × ${xlsHeaders.length} 列</div>
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">数据预览（前5行）</div>
+    ${tbl}
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">字段映射 <span style="font-weight:400;font-size:10px;">（已自动识别，可调整）</span></div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">${selects}</div>
+    <button class="btn-p full" onclick="importXls()">导入全部行程</button>
+    <div id="xlsParsed" style="margin-top:10px;"></div>`;
+}
+
+function autoDetectCols(headers,rows){
+  const map={};
+  const rules={flight:/航班|flight|班次|事项|行程|任务|name|title/i,date:/日期|date|年月日|出发日|起飞日/i,time:/起飞|出发时间|departure|time(?!zone)|时间/i,arrive:/抵达|落地|arrival|到达时间/i,location:/地点|机场|airport|terminal|城市|目的地|destination|location/i,contact:/联系|旅客|passenger|姓名|contact|负责|人员/i,note:/备注|note|remark|说明|要求/i};
+  headers.forEach((h,i)=>{Object.entries(rules).forEach(([k,re])=>{if(map[k]===undefined&&re.test(h))map[k]=i;});});
+  if(Object.keys(map).length<2&&rows.length){
+    const s=rows.slice(0,5);
+    headers.forEach((_,ci)=>{
+      const vals=s.map(r=>String(r[ci]??'').trim()).filter(Boolean);
+      if(map.date===undefined&&vals.some(v=>/\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}月\d{1,2}/.test(v)))map.date=ci;
+      if(map.time===undefined&&vals.some(v=>/^\d{1,2}:\d{2}$/.test(v)))map.time=ci;
+      if(map.flight===undefined&&vals.some(v=>/^[A-Z]{1,2}\d{3,4}$/i.test(v)))map.flight=ci;
+    });
+  }
+  return map;
+}
+
+function importXls(){
+  ['flight','date','time','arrive','location','contact','note'].forEach(k=>{const s=document.getElementById('map_'+k);if(s)colMap[k]=s.value===''?undefined:parseInt(s.value);});
+  if(colMap.flight===undefined&&colMap.time===undefined&&colMap.date===undefined){alert('请至少映射「航班/事项名称」或「日期」列');return;}
+  const g=(row,key)=>colMap[key]!==undefined?String(row[colMap[key]]??'').trim():'';
+  parsedItems=xlsRows.map((row,idx)=>{
+    const flight=g(row,'flight'),rawDate=g(row,'date'),rawTime=g(row,'time'),rawArr=g(row,'arrive'),location=g(row,'location'),contact=g(row,'contact'),note=g(row,'note');
+    const dateStr=parseDate(rawDate)||currentDate,timeStr=parseTime(rawTime),arrStr=parseTime(rawArr);
+    const title=flight||`行程 ${idx+1}`;
+    return{title,date:dateStr,time:timeStr,endTime:arrStr,location,contact,note:note||[rawDate,rawTime].filter(Boolean).join(' '),type:/接机|送机|接送|flight|航班/i.test(title+location)?'core':'temp'};
+  }).filter(e=>e.title);
+  const el=document.getElementById('xlsParsed');
+  if(el)el.innerHTML=renderParsedCards(parsedItems);
+}
+
+// ── Claude API OCR ────────────────────────────────────────────
+async function callClaudeOCR(base64, mediaType){
+  const statusEl=document.getElementById('ocrStatus');
+  const ta=document.getElementById('imgTa');
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        messages:[{
+          role:'user',
+          content:[
+            {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
+            {type:'text',text:`请识别这张图片中的所有行程信息，提取并以清晰文字列出：日期、时间、航班号、地点/机场、联系人姓名、备注等字段。每条行程单独一行，格式尽量清晰。只输出识别到的内容，不要额外解释。`}
+          ]
+        }]
+      })
+    });
+    const data=await resp.json();
+    if(data.error){throw new Error(data.error.message);}
+    const text=data.content?.find(b=>b.type==='text')?.text||'';
+    if(ta) ta.value=text;
+    if(statusEl) statusEl.innerHTML=`<span style="color:var(--cs);">✅ Claude AI 识别完成，请确认内容后点「生成事项」</span>`;
+  }catch(err){
+    if(statusEl) statusEl.innerHTML=`<span style="color:var(--ca);">⚠️ AI 识别失败（${err.message}），请手动输入内容</span>`;
+    if(ta) ta.placeholder='AI 识别失败，请手动输入图片中的行程信息...';
+  }
+}
+
+// ── Claude API text parse helper ──────────────────────────────
+async function callClaudeParseText(text, outId){
+  const el=document.getElementById(outId);
+  if(!el)return;
+  el.innerHTML=`<div style="background:var(--cpb);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--cp);text-align:center;">⏳ Claude AI 正在解析行程信息...</div>`;
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        messages:[{
+          role:'user',
+          content:`请从以下文字中提取行程事项，以 JSON 数组格式返回，每项包含字段：title(事项名称), date(YYYY-MM-DD格式，相对日期如"明天"基于今天${new Date().toISOString().slice(0,10)}推算), time(HH:MM格式), location(地点), contact(联系人), note(备注), type(core或temp)。只返回 JSON 数组，不要其他文字。\n\n文字内容：\n${text}`
+        }]
+      })
+    });
+    const data=await resp.json();
+    const raw=data.content?.find(b=>b.type==='text')?.text||'[]';
+    const clean=raw.replace(/```json|```/g,'').trim();
+    const items=JSON.parse(clean);
+    parsedItems=items.map(it=>({
+      title:it.title||'新事项',
+      date:it.date||currentDate,
+      time:it.time||'',
+      location:it.location||'',
+      contact:it.contact||'',
+      note:it.note||'',
+      type:it.type||'temp'
+    }));
+    el.innerHTML=renderParsedCards(parsedItems);
+  }catch(err){
+    // Fallback to local NL parser
+    parsedItems=parseNL(text);
+    el.innerHTML=renderParsedCards(parsedItems);
+  }
+}
+
+function parseAndShow(taId, outId){
+  const text=(document.getElementById(taId)?.value||'').trim();
+  if(!text){alert('请先输入内容');return;}
+  callClaudeParseText(text, outId);
+}
+
+function parseNL(text){
+  const blocks=text.split(/\n{2,}/).filter(b=>b.trim());
+  const results=[];
+  (blocks.length?blocks:[text]).forEach(block=>{
+    const combined=block.trim();
+    const timeM=combined.match(/(\d{1,2})[:\uff1a点时](\d{2})?(?:\s*分)?/);
+    const timeStr=timeM?String(parseInt(timeM[1])).padStart(2,'0')+':'+(timeM[2]||'00'):'';
+    const dateM=combined.match(/明天|后天|大后天|今天|(\d{1,2})月(\d{1,2})[日号]?/);
+    let dateStr=currentDate;
+    if(dateM){const d=new Date(currentDate);if(dateM[0]==='明天')d.setDate(d.getDate()+1);else if(dateM[0]==='后天')d.setDate(d.getDate()+2);else if(dateM[0]==='大后天')d.setDate(d.getDate()+3);else if(dateM[1]){d.setMonth(parseInt(dateM[1])-1);d.setDate(parseInt(dateM[2]));}dateStr=d.toISOString().slice(0,10);}
+    const flightM=combined.match(/[A-Z]{1,2}\s?\d{3,4}/i);
+    const locM=combined.match(/(?:前往|去|到|在)\s*([^\s,，。、\d]{2,12}(?:馆|场|楼|院|酒店|机场|T\d|航站楼)?)/);
+    const conM=combined.match(/(?:联系|联系人[：:]?|找)\s*([^\s,，。、\d]{2,6})/);
+    const flight=flightM?flightM[0].toUpperCase():'';
+    let title=combined.split(/[,，。\n]/)[0].replace(/\d{1,2}[:\uff1a点时]\d{0,2}(?:\s*分)?/g,'').replace(/明天|后天|大后天|今天/g,'').replace(/^[-\d\.\s\*•·]+/,'').trim().slice(0,30);
+    if(flight&&!title.includes(flight))title=(title?title+' ':'')+flight;
+    if(!title)title='新事项';
+    results.push({title,date:dateStr,time:timeStr,location:(locM?locM[1]:''),contact:(conM?conM[1]:''),note:combined.slice(0,80),type:/接机|送机|航班|flight/i.test(combined)?'core':'temp'});
+  });
+  return results.length?results:[{title:text.trim().slice(0,30)||'新事项',date:currentDate,time:'',location:'',contact:'',note:text.trim(),type:'temp'}];
+}
+
+function renderParsedCards(items){
+  if(!items.length)return`<div style="background:var(--cab);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--ca);">未识别到有效行程，请检查输入内容</div>`;
+  return`<div style="background:var(--csb);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--cs);margin-bottom:8px;">识别到 ${items.length} 条行程，逐项确认后点击「录入」</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+    ${items.map((item,i)=>{const m=ROLE_META[item.type==='core'?'driver':'other'];return`<div id="pc_${i}" style="background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start;">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:3px;">${item.title}</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.8;">
+          ${item.date||item.time?`📅 ${item.date}${item.time?' '+item.time:''}`:''}
+          ${item.location?`<br>📍 ${item.location}`:''}
+          ${item.contact?`<br>👤 ${item.contact}`:''}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;">
+        <span class="badge ${item.type}">${item.type==='core'?'核心行程':'临时事项'}</span>
+        <button id="ab_${i}" onclick="addParsedItem(${i})" style="font-size:11px;padding:4px 10px;border-radius:7px;border:1px solid var(--cs);cursor:pointer;background:transparent;color:var(--cs);font-family:inherit;">录入</button>
+      </div>
+    </div>`;}).join('')}
+    </div>`;
+}
+
+function addParsedItem(i){
+  const item=parsedItems[i];if(!item)return;
+  events.push({id:nextId++,type:item.type,cat:'general',title:item.title,time:item.time||'09:00',endTime:item.endTime||'',date:item.date||currentDate,location:item.location||'',contact:item.contact||'',note:item.note||'',status:'pending',followCount:0,remindBefore:60,cids:[]});
+  const btn=document.getElementById('ab_'+i),card=document.getElementById('pc_'+i);
+  if(btn){btn.textContent='✓ 已录入';btn.disabled=true;btn.style.color='var(--text3)';btn.style.borderColor='var(--bd)';}
+  if(card)card.style.opacity='0.55';
+}
+
+function parseDate(raw){
+  if(!raw)return'';const s=String(raw).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  let m=s.match(/(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+  if(m)return`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m=s.match(/(\d{1,2})[月\/](\d{1,2})[日号]?/);
+  if(m)return`${new Date().getFullYear()}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  const n=parseFloat(s);if(!isNaN(n)&&n>40000){const d=new Date(Math.round((n-25569)*86400*1000));return d.toISOString().slice(0,10);}
+  return'';
+}
+function parseTime(raw){
+  if(!raw)return'';const s=String(raw).trim();
+  let m=s.match(/(\d{1,2})[:\uff1a](\d{2})/);if(m)return`${m[1].padStart(2,'0')}:${m[2]}`;
+  m=s.match(/(\d{1,2})[点时](\d{2})?/);if(m)return`${m[1].padStart(2,'0')}:${m[2]||'00'}`;
+  const f=parseFloat(s);if(!isNaN(f)&&f>0&&f<1){const mins=Math.round(f*1440);return`${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`;}
+  return'';
+}
+
+function setType(el,t){selType=t;document.querySelectorAll('.type-btn').forEach(b=>b.className='type-btn');el.className='type-btn '+(t==='core'?'ca':'cb');}
+
+function submitNew(){
+  const date=document.getElementById('nDate')?.value;
+  const title=gv('nTitle'),time=document.getElementById('nTime')?.value;
+  if(!title||!date||!time){alert('请填写事项名称、日期和时间');return;}
+  const selCids=contacts.filter(c=>document.getElementById('ev_c_'+c.id)?.checked).map(c=>c.id);
+  events.push({id:nextId++,type:selType,cat:'general',title,time,endTime:document.getElementById('nEnd')?.value||'',date,location:gv('nLoc'),note:gv('nNote'),status:'pending',followCount:0,remindBefore:parseInt(document.getElementById('nRemind')?.value||120),cids:selCids});
+  currentDate=date;
+  alert('✓ 已保存：'+title);switchNav('schedule');
+}
+
+function openDetail(id){
+  const ev=events.find(e=>e.id===id);if(!ev)return;
+  const sl=ev.status==='done'?'已完成':ev.status==='follow'?'跟进中':'待处理';
+  const lc=(ev.cids||[]).map(cid=>{const c=gc(cid);if(!c)return'';const m=ROLE_META[c.role];
+  return`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:10px;margin-bottom:5px;cursor:pointer;" onclick="openContactDetail(${c.id})">
+    <div style="font-size:18px;">${m.icon}</div>
+    <div style="flex:1;"><div style="font-size:13px;font-weight:700;">${c.name}</div>
+    <div style="font-size:11px;color:${m.color};">${m.label}${c.role==='driver'&&c.special?.plate?' · 🚗 '+c.special.plate:''}</div>
+    ${c.phone?`<div style="font-size:12px;color:var(--cp);font-weight:700;">${c.phone}</div>`:''}
+    </div>${c.phone?`<button class="call-btn" onclick="event.stopPropagation();callContact('${c.phone}')">📞 拨打</button>`:''}</div>`;}).join('');
+  document.getElementById('modalContainer').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hdr"><div class="modal-title">${ev.title}</div><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="detail-box">
+        <div><strong>时间：</strong><span>${ev.date} ${ev.time}${ev.endTime?' — '+ev.endTime:''}</span></div>
+        ${ev.flight?`<div><strong>航班：</strong><span>${ev.flight}${ev.origin?' · '+ev.origin:''}</span></div>`:''}
+        ${ev.location?`<div><strong>地点：</strong><span>${ev.location}</span></div>`:''}
+        ${ev.pax?.length?`<div><strong>旅客（${ev.pax.length}人）：</strong><span>${ev.pax.join('、')}</span></div>`:''}
+        ${ev.note?`<div><strong>备注：</strong><span>${ev.note}</span></div>`:''}
+        <div><strong>状态：</strong><span>${sl}${ev.followCount>0?' | 已跟进'+ev.followCount+'次':''}</span></div>
+      </div>
+      ${lc?`<div><div class="sec">关联联系人</div>${lc}</div>`:''}
+    </div>
+    <div class="modal-ftr">${ev.status!=='done'?`<button class="btn-p" onclick="completeEv(${ev.id});closeModal()">标记完成</button>`:''} ${ev.status==='pending'?`<button class="btn-s" onclick="followEv(${ev.id});closeModal()">设为跟进</button>`:''}<button class="btn-s" onclick="closeModal()">关闭</button></div>
+  </div></div>`;
+}
+function closeModal(){document.getElementById('modalContainer').innerHTML='';}
+function completeEv(id){const e=events.find(e=>e.id===id);if(e){e.status='done';render();}}
+function followEv(id){const e=events.find(e=>e.id===id);if(e){e.status='follow';e.followCount++;render();}}
+function setView(v){currentView=v;render();}
+function setType(el,t){selType=t;document.querySelectorAll('.type-btn').forEach(b=>b.className='type-btn');el.className='type-btn '+(t==='core'?'ca':'cb');}
+function submitNew(){
+  const date=document.getElementById('nDate')?.value;
+  const title=gv('nTitle'),time=document.getElementById('nTime')?.value;
+  if(!title||!date||!time){alert('请填写事项名称、日期和时间');return;}
+  const selCids=contacts.filter(c=>document.getElementById('ev_c_'+c.id)?.checked).map(c=>c.id);
+  events.push({id:nextId++,type:selType,cat:'general',title,time,endTime:document.getElementById('nEnd')?.value||'',date,location:gv('nLoc'),note:gv('nNote'),status:'pending',followCount:0,remindBefore:parseInt(document.getElementById('nRemind')?.value||120),cids:selCids});
+  currentDate=date;
+  alert('✓ 已保存：'+title);switchNav('schedule');
+}
+
+const reminderData=[
+  {title:'离境日提醒',body:'4月18日全队离境\n首班 12:00 CZ8725 · 末班 22:05 CZ8519\n\n司机安排：\n'+contacts.filter(c=>c.role==='driver').map(d=>d.name+' '+d.phone+' 🚗'+(d.special?.plate||'')).join('\n')},
+  {title:'CZ3441大团体送机',body:'18:25 CZ3441 需送机8人\n建议16:30集合出发\n\n联系司机：\n'+contacts.filter(c=>c.role==='driver').map(d=>d.name+' '+d.phone+' 🚗'+(d.special?.plate||'')).join('\n')},
+];
+function showRemind(){const r=reminderData[rpIdx%reminderData.length];document.getElementById('rpTitle').textContent=r.title;document.getElementById('rpBody').textContent=r.body;document.getElementById('remindPopup').style.display='block';}
+function markDone(){document.getElementById('remindPopup').style.display='none';rpIdx++;}
+function snooze(){document.getElementById('remindPopup').style.display='none';setTimeout(showRemind,3000);}
+
+function toggleVer(){
+  const p=document.getElementById('verPopup');
+  if(!p) return;
+  const isOpen=p.classList.contains('open');
+  p.classList.toggle('open');
+  if(!isOpen){
+    setTimeout(()=>{
+      document.addEventListener('click',function h(e){
+        if(!e.target.closest('.ver-badge')){p.classList.remove('open');document.removeEventListener('click',h);}
+      });
+    },0);
+  }
+}
+
+render();
+
+// 检测 file:// 协议，显示横幅提示
+if(location.protocol === 'file:'){
+  document.getElementById('fileBanner').style.display = 'block';
+}
+</script>
+</body>
+</html>
